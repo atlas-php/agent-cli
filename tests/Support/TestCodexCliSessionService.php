@@ -27,7 +27,7 @@ class TestCodexCliSessionService extends CodexCliSessionService
     /**
      * @param  array<int, string>  $arguments
      */
-    protected function buildProcess(array $arguments, bool $interactive): Process
+    protected function buildProcess(array $arguments, bool $interactive, ?string $resumeThreadId = null): Process
     {
         if ($interactive) {
             if ($this->interactiveProcess === null) {
