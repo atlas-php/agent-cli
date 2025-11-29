@@ -17,6 +17,8 @@ use Symfony\Component\Process\Process;
  */
 class CodexCliSessionService
 {
+    private const PROVIDER = 'codex';
+
     private string $sessionDirectory;
 
     private ?string $workspaceDirectory;
@@ -313,7 +315,8 @@ class CodexCliSessionService
         $model = $this->determineModelFromArguments($arguments);
 
         $event = [
-            'type' => 'workspace.context',
+            'type' => 'workspace',
+            'provider' => self::PROVIDER,
             'workspace_path' => $resolvedWorkspace,
             'session_log_path' => $this->sessionDirectory,
         ];
@@ -737,9 +740,10 @@ class CodexCliSessionService
                     $codexSessionId !== null ? 'session id: '.$codexSessionId : null,
                 ]);
 
-            case 'workspace.context':
+            case 'workspace':
                 return $this->formatLines([
                     'workspace',
+                    isset($event['provider']) ? 'provider: '.$event['provider'] : null,
                     isset($event['workspace_path']) ? 'codex: '.$event['workspace_path'] : null,
                     isset($event['platform_path']) ? 'platform: '.$event['platform_path'] : null,
                     isset($event['session_log_path']) ? 'logs: '.$event['session_log_path'] : null,

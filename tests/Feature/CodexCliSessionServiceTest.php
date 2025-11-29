@@ -81,7 +81,8 @@ final class CodexCliSessionServiceTest extends TestCase
         $lines = array_values(array_filter(explode("\n", $logContents)));
         $workspaceEvent = json_decode($lines[0] ?? '', true);
         $this->assertIsArray($workspaceEvent);
-        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+        $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
+        $this->assertSame('codex', $workspaceEvent['provider'] ?? null);
         $this->assertSame(realpath($workspacePath) ?: $workspacePath, $workspaceEvent['workspace_path'] ?? null);
         $this->assertSame($expectedDirectory, $workspaceEvent['session_log_path'] ?? null);
 
@@ -138,7 +139,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
         $workspaceEvent = json_decode($lines[0] ?? '', true);
         $this->assertIsArray($workspaceEvent);
-        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+        $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
         $this->assertSame('o1-mini', $workspaceEvent['model'] ?? null);
         $this->assertSame(realpath($workspacePath) ?: $workspacePath, $workspaceEvent['workspace_path'] ?? null);
     }
@@ -188,7 +189,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
         $workspaceEvent = json_decode($lines[0] ?? '', true);
         $this->assertIsArray($workspaceEvent);
-        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+        $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
         $this->assertSame(realpath($overridePath) ?: $overridePath, $workspaceEvent['workspace_path'] ?? null);
     }
 
@@ -233,7 +234,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
         $workspaceEvent = json_decode($lines[0] ?? '', true);
         $this->assertIsArray($workspaceEvent);
-        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+        $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
 
         $threadRequest = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($threadRequest);
@@ -286,7 +287,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
         $workspaceEvent = json_decode($lines[0] ?? '', true);
         $this->assertIsArray($workspaceEvent);
-        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+        $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
 
         $threadRequest = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($threadRequest);
@@ -336,7 +337,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
         $workspaceEvent = json_decode($lines[0] ?? '', true);
         $this->assertIsArray($workspaceEvent);
-        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+        $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
 
         $threadRequest = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($threadRequest);
@@ -394,7 +395,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
         $workspaceEvent = json_decode($lines[0] ?? '', true);
         $this->assertIsArray($workspaceEvent);
-        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+        $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
 
         $firstEvent = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($firstEvent);
