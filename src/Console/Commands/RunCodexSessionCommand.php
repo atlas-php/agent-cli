@@ -22,7 +22,8 @@ class RunCodexSessionCommand extends Command
         {--interactive : Run Codex attached to your terminal without logging}
         {--model= : Override the Codex model for this run}
         {--instructions= : Additional system instructions appended ahead of the user task}
-        {--meta= : JSON object of metadata stored on the synthetic thread.request log entry}
+        {--meta= : JSON object of metadata stored on the synthetic thread lifecycle log entry}
+        {--resume= : Resume an existing Codex thread by identifier}
     ';
 
     /**
@@ -71,6 +72,7 @@ class RunCodexSessionCommand extends Command
 
             return self::FAILURE;
         }
+        $resumeThreadId = $this->resolveResumeOption();
         $arguments = $this->injectRuntimeOptions($arguments);
         $interactive = (bool) $this->option('interactive');
 
@@ -80,7 +82,8 @@ class RunCodexSessionCommand extends Command
                 $interactive,
                 $initialUserInput,
                 $systemInstructions,
-                $threadRequestMeta
+                $threadRequestMeta,
+                $resumeThreadId
             );
         } catch (\Throwable $exception) {
             $this->error('Codex session failed: '.$exception->getMessage());
@@ -183,6 +186,16 @@ class RunCodexSessionCommand extends Command
         }
 
         return $decoded;
+    }
+
+    private function resolveResumeOption(): ?string
+    {
+        $option = $this->option('resume');
+        if (is_string($option)) {
+            $option = trim($option);
+        }
+
+        return is_string($option) && $option !== '' ? $option : null;
     }
 
     /**

@@ -59,7 +59,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $service->headlessProcess = $process;
 
-        $result = $service->startSession(['tasks:list'], false, 'tasks:list', null);
+        $result = $service->startSession(['tasks:list'], false, 'tasks:list', null, null, null);
         $output = $service->streamedOutput[Process::OUT] ?? '';
 
         $this->assertSame('thread-123', $result['session_id']);
@@ -115,7 +115,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $service->headlessProcess = $process;
 
-        $result = $service->startSession(['tasks:list'], false, 'local override', 'Follow these');
+        $result = $service->startSession(['tasks:list'], false, 'local override', 'Follow these', null, null);
         $this->assertSame('thread-123', $result['session_id']);
 
         $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
@@ -163,7 +163,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $service->headlessProcess = $process;
 
-        $service->startSession(['tasks:list'], false, 'tasks:list --plan', 'Always lint');
+        $service->startSession(['tasks:list'], false, 'tasks:list --plan', 'Always lint', null, null);
 
         $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
         $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-123.jsonl';
@@ -207,7 +207,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $service->headlessProcess = $process;
 
         $meta = ['assistant_id' => 'assistant-1', 'user_id' => 42];
-        $service->startSession(['tasks:list'], false, 'run diagnostics', null, $meta);
+        $service->startSession(['tasks:list'], false, 'run diagnostics', null, $meta, null);
 
         $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
         $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-456.jsonl';
@@ -221,6 +221,56 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertSame(42, $threadRequest['user_id'] ?? null);
         $this->assertSame('run diagnostics', $threadRequest['task'] ?? null);
         $this->assertArrayNotHasKey('assistant_id', json_decode($lines[1] ?? '{}', true) ?: []);
+    }
+
+    public function test_thread_resumed_event_is_logged_when_resuming_existing_session(): void
+    {
+        $this->cleanCodexDirectory();
+
+        $service = new TestCodexCliSessionService;
+        /** @var Process&\Mockery\MockInterface $process */
+        $process = Mockery::mock(Process::class);
+
+        $events = [
+            ['type' => 'item.completed', 'item' => ['type' => 'agent_message', 'text' => 'acknowledged']],
+            ['type' => 'turn.completed', 'usage' => ['input_tokens' => 50, 'output_tokens' => 75]],
+        ];
+
+        $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'run')
+            ->once()
+            ->andReturnUsing(function (callable $callback) use ($events): int {
+                foreach ($events as $event) {
+                    $callback(Process::OUT, json_encode($event)."\n");
+                }
+
+                return 0;
+            });
+        $this->mockExpectation($process, 'isSuccessful')->once()->andReturn(true);
+        $this->mockExpectation($process, 'getExitCode')->once()->andReturn(0);
+
+        $service->headlessProcess = $process;
+
+        $service->startSession(
+            ['tasks:resume'],
+            false,
+            'continue troubleshooting',
+            null,
+            null,
+            'thread-789'
+        );
+
+        $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
+        $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-789.jsonl';
+        $this->assertFileExists($expectedPath);
+
+        $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
+        $firstEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($firstEvent);
+        $this->assertSame('thread.resumed', $firstEvent['type'] ?? null);
+        $this->assertSame('continue troubleshooting', $firstEvent['task'] ?? null);
+        $this->assertArrayNotHasKey('instructions', $firstEvent);
     }
 
     public function test_headless_session_throws_when_process_fails(): void
