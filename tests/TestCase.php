@@ -6,7 +6,7 @@ namespace Atlas\Agent\Tests;
 
 use Atlas\Agent\Providers\AgentCliServiceProvider;
 use Mockery;
-use Mockery\ExpectationInterface;
+use Mockery\Expectation;
 use Mockery\MockInterface;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
 
@@ -55,12 +55,10 @@ abstract class TestCase extends OrchestraTestCase
      * @template T of MockInterface
      *
      * @param  T  $mock
-     *
-     * @phpstan-return \Mockery\Expectation
      */
-    protected function mockExpectation(MockInterface $mock, string $method): ExpectationInterface
+    protected function mockExpectation(MockInterface $mock, string $method): Expectation
     {
-        /** @var ExpectationInterface $expectation */
+        /** @var Expectation $expectation */
         $expectation = $mock->shouldReceive($method);
 
         return $expectation;
