@@ -177,6 +177,52 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertSame('tasks:list --plan', $threadRequest['task'] ?? null);
     }
 
+    public function test_thread_request_event_includes_custom_metadata_only_in_log(): void
+    {
+        $this->cleanCodexDirectory();
+
+        $service = new TestCodexCliSessionService;
+        /** @var Process&\Mockery\MockInterface $process */
+        $process = Mockery::mock(Process::class);
+
+        $events = [
+            ['type' => 'thread.started', 'thread_id' => 'thread-456'],
+            ['type' => 'turn.completed', 'usage' => ['input_tokens' => 10, 'output_tokens' => 20]],
+        ];
+
+        $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'run')
+            ->once()
+            ->andReturnUsing(function (callable $callback) use ($events): int {
+                foreach ($events as $event) {
+                    $callback(Process::OUT, json_encode($event)."\n");
+                }
+
+                return 0;
+            });
+        $this->mockExpectation($process, 'isSuccessful')->once()->andReturn(true);
+        $this->mockExpectation($process, 'getExitCode')->once()->andReturn(0);
+
+        $service->headlessProcess = $process;
+
+        $meta = ['assistant_id' => 'assistant-1', 'user_id' => 42];
+        $service->startSession(['tasks:list'], false, 'run diagnostics', null, $meta);
+
+        $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
+        $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-456.jsonl';
+        $this->assertFileExists($expectedPath);
+
+        $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
+        $threadRequest = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($threadRequest);
+        $this->assertSame('thread.request', $threadRequest['type'] ?? null);
+        $this->assertSame('assistant-1', $threadRequest['assistant_id'] ?? null);
+        $this->assertSame(42, $threadRequest['user_id'] ?? null);
+        $this->assertSame('run diagnostics', $threadRequest['task'] ?? null);
+        $this->assertArrayNotHasKey('assistant_id', json_decode($lines[1] ?? '{}', true) ?: []);
+    }
+
     public function test_headless_session_throws_when_process_fails(): void
     {
         $this->cleanCodexDirectory();

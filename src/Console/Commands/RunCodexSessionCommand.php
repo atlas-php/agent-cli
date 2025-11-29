@@ -22,6 +22,7 @@ class RunCodexSessionCommand extends Command
         {--interactive : Run Codex attached to your terminal without logging}
         {--model= : Override the Codex model for this run}
         {--instructions= : Additional system instructions appended ahead of the user task}
+        {--meta= : JSON object of metadata stored on the synthetic thread.request log entry}
     ';
 
     /**
@@ -62,6 +63,14 @@ class RunCodexSessionCommand extends Command
 
         $initialUserInput = $this->buildInitialUserInput($arguments);
         $systemInstructions = $this->resolveInstructionsOption();
+
+        try {
+            $threadRequestMeta = $this->resolveMetaOption();
+        } catch (\InvalidArgumentException $exception) {
+            $this->error($exception->getMessage());
+
+            return self::FAILURE;
+        }
         $arguments = $this->injectRuntimeOptions($arguments);
         $interactive = (bool) $this->option('interactive');
 
@@ -70,7 +79,8 @@ class RunCodexSessionCommand extends Command
                 $arguments,
                 $interactive,
                 $initialUserInput,
-                $systemInstructions
+                $systemInstructions,
+                $threadRequestMeta
             );
         } catch (\Throwable $exception) {
             $this->error('Codex session failed: '.$exception->getMessage());
@@ -150,6 +160,29 @@ class RunCodexSessionCommand extends Command
         }
 
         return is_string($option) && $option !== '' ? $option : null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function resolveMetaOption(): ?array
+    {
+        $option = $this->option('meta');
+        if (! is_string($option)) {
+            return null;
+        }
+
+        $trimmed = trim($option);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $decoded = json_decode($trimmed, true);
+        if (! is_array($decoded)) {
+            throw new \InvalidArgumentException('The --meta option must be valid JSON.');
+        }
+
+        return $decoded;
     }
 
     /**

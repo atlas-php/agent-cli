@@ -49,6 +49,7 @@ Options:
 * `--interactive` – run Codex directly attached to your terminal (no JSON logging).
 * `--model=` – override the Codex model for the current run.
 * `--instructions=` – prepend additional system instructions ahead of the user task; stored in the JSON log as a `thread.request` event.
+* `--meta=` – supply a JSON object of metadata (IDs, tags, etc.) that is recorded alongside the synthetic `thread.request` log entry.
 
 Upon completion the command prints:
 
@@ -77,7 +78,7 @@ $result = app(CodexCliSessionService::class)->startSession([
 
 The service handles both interactive and headless runs, automatically sanitizes ANSI escape sequences, streams events to STDOUT/STDERR, and records every Codex JSON event to a JSON Lines log.
 
-Each headless log now begins with a synthetic `thread.request` entry summarizing the provided system instructions (if any) and the user task that triggered the run, so downstream tooling can reconstruct the full prompt context.
+Each headless log now begins with a synthetic `thread.request` entry summarizing the provided system instructions (if any), the user task that triggered the run, and any arbitrary metadata passed through `--meta`, so downstream tooling can reconstruct the full prompt context.
 
 ## Configuration
 

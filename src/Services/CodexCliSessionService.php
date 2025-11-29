@@ -26,13 +26,15 @@ class CodexCliSessionService
 
     /**
      * @param  array<int, string>  $arguments
+     * @param  array<string, mixed>|null  $threadRequestMeta
      * @return array{session_id: string, json_file_path: string|null, exit_code: int|null}
      */
     public function startSession(
         array $arguments,
         bool $interactive = false,
         ?string $initialUserInput = null,
-        ?string $systemInstructions = null
+        ?string $systemInstructions = null,
+        ?array $threadRequestMeta = null
     ): array
     {
         $sessionId = (string) Str::uuid();
@@ -48,7 +50,13 @@ class CodexCliSessionService
         }
 
         $jsonFilePath = $this->prepareJsonLogFile($sessionId);
-        $headlessResult = $this->runHeadless($arguments, $jsonFilePath, $initialUserInput, $systemInstructions);
+        $headlessResult = $this->runHeadless(
+            $arguments,
+            $jsonFilePath,
+            $initialUserInput,
+            $systemInstructions,
+            $threadRequestMeta
+        );
         $process = $headlessResult['process'];
         $codexSessionId = $headlessResult['codex_session_id'] ?? $sessionId;
 
@@ -94,13 +102,15 @@ class CodexCliSessionService
 
     /**
      * @param  array<int, string>  $arguments
+     * @param  array<string, mixed>|null  $threadRequestMeta
      * @return array{process: Process, codex_session_id: string|null}
      */
     private function runHeadless(
         array $arguments,
         string $jsonFilePath,
         ?string $initialUserInput,
-        ?string $systemInstructions
+        ?string $systemInstructions,
+        ?array $threadRequestMeta
     ): array
     {
         $process = $this->buildProcess($arguments, false);
@@ -121,15 +131,17 @@ class CodexCliSessionService
          *     initial_user_input: string|null,
          *     thread_input_applied: bool,
          *     system_instructions: string|null,
-         *     thread_request_logged: bool
-         * } $jsonState
-         */
+     *     thread_request_logged: bool,
+     *     thread_request_meta: array<string, mixed>
+     * } $jsonState
+     */
         $jsonState = [
             'pending_items' => [],
             'initial_user_input' => $initialUserInput !== null ? trim($initialUserInput) : null,
             'thread_input_applied' => false,
             'system_instructions' => $systemInstructions !== null ? trim($systemInstructions) : null,
             'thread_request_logged' => false,
+            'thread_request_meta' => is_array($threadRequestMeta) ? $threadRequestMeta : [],
         ];
 
         $this->maybeLogThreadRequestEvent($jsonHandle, $codexSessionId, $jsonState);
@@ -213,7 +225,8 @@ class CodexCliSessionService
      *     initial_user_input: string|null,
      *     thread_input_applied: bool,
      *     system_instructions: string|null,
-     *     thread_request_logged: bool
+     *     thread_request_logged: bool,
+     *     thread_request_meta: array<string, mixed>
      * }  $state
      */
     private function processJsonBuffer(string &$buffer, $jsonHandle, ?string &$codexSessionId, array &$state): void
@@ -232,7 +245,8 @@ class CodexCliSessionService
      *     initial_user_input: string|null,
      *     thread_input_applied: bool,
      *     system_instructions: string|null,
-     *     thread_request_logged: bool
+     *     thread_request_logged: bool,
+     *     thread_request_meta: array<string, mixed>
      * }  $state
      */
     private function processJsonLine(string $line, $jsonHandle, ?string &$codexSessionId, array &$state): void
@@ -280,7 +294,8 @@ class CodexCliSessionService
      *     initial_user_input: string|null,
      *     thread_input_applied: bool,
      *     system_instructions: string|null,
-     *     thread_request_logged: bool
+     *     thread_request_logged: bool,
+     *     thread_request_meta: array<string, mixed>
      * }  $state
      */
     private function maybeLogThreadRequestEvent($jsonHandle, ?string &$codexSessionId, array &$state): void
@@ -299,7 +314,9 @@ class CodexCliSessionService
             $task = null;
         }
 
-        if ($instructions === null && $task === null) {
+        $meta = $state['thread_request_meta'];
+
+        if ($instructions === null && $task === null && $meta === []) {
             return;
         }
 
@@ -308,6 +325,14 @@ class CodexCliSessionService
             'instructions' => $instructions,
             'task' => $task,
         ];
+
+        foreach ($meta as $key => $value) {
+            if (in_array($key, ['type', 'instructions', 'task'], true)) {
+                continue;
+            }
+
+            $event[$key] = $value;
+        }
 
         $encoded = $this->encodeEventLine($event);
         if ($encoded === null) {
@@ -325,7 +350,8 @@ class CodexCliSessionService
      *     initial_user_input: string|null,
      *     thread_input_applied: bool,
      *     system_instructions: string|null,
-     *     thread_request_logged: bool
+     *     thread_request_logged: bool,
+     *     thread_request_meta: array<string, mixed>
      * }  $state
      */
     private function maybeCaptureUserInputFromEvent(array $event, array &$state): void
@@ -385,7 +411,8 @@ class CodexCliSessionService
      *     initial_user_input: string|null,
      *     thread_input_applied: bool,
      *     system_instructions: string|null,
-     *     thread_request_logged: bool
+     *     thread_request_logged: bool,
+     *     thread_request_meta: array<string, mixed>
      * }  $state
      * @return array<string, mixed>
      */
@@ -469,7 +496,8 @@ class CodexCliSessionService
      *     initial_user_input: string|null,
      *     thread_input_applied: bool,
      *     system_instructions: string|null,
-     *     thread_request_logged: bool
+     *     thread_request_logged: bool,
+     *     thread_request_meta: array<string, mixed>
      * }  $state
      */
     private function renderCodexEvent(array $event, ?string &$codexSessionId, array &$state): ?string
@@ -526,7 +554,8 @@ class CodexCliSessionService
      *     initial_user_input: string|null,
      *     thread_input_applied: bool,
      *     system_instructions: string|null,
-     *     thread_request_logged: bool
+     *     thread_request_logged: bool,
+     *     thread_request_meta: array<string, mixed>
      * }  $state
      */
     private function renderItemEvent(string $phase, array $item, array &$state): ?string
@@ -585,7 +614,8 @@ class CodexCliSessionService
      *     initial_user_input: string|null,
      *     thread_input_applied: bool,
      *     system_instructions: string|null,
-     *     thread_request_logged: bool
+     *     thread_request_logged: bool,
+     *     thread_request_meta: array<string, mixed>
      * }  $state
      */
     private function renderCommandExecutionItem(string $phase, array $item, array &$state): ?string
