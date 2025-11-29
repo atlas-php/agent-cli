@@ -20,6 +20,11 @@ class TestCodexCliSessionService extends CodexCliSessionService
     public ?Process $interactiveProcess = null;
 
     /**
+     * @var array<string, string>
+     */
+    public array $streamedOutput = [];
+
+    /**
      * @param  array<int, string>  $arguments
      */
     protected function buildProcess(array $arguments, bool $interactive): Process
@@ -37,5 +42,10 @@ class TestCodexCliSessionService extends CodexCliSessionService
         }
 
         return $this->headlessProcess;
+    }
+
+    protected function streamToTerminal(string $type, string $cleanBuffer): void
+    {
+        $this->streamedOutput[$type] = ($this->streamedOutput[$type] ?? '').$cleanBuffer;
     }
 }

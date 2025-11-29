@@ -16,17 +16,20 @@ use Mockery;
  */
 final class RunCodexSessionCommandTest extends TestCase
 {
-    public function testCommandFailsWhenNoArgumentsProvided(): void
+    public function test_command_fails_when_no_arguments_provided(): void
     {
-        $this->artisan('codex:session')
+        /** @var \Illuminate\Testing\PendingCommand $command */
+        $command = $this->artisan('codex:session');
+        $command
             ->expectsOutput('You must provide arguments for the Codex CLI.')
             ->assertExitCode(Command::FAILURE);
     }
 
-    public function testCommandRunsSessionAndPrintsSummary(): void
+    public function test_command_runs_session_and_prints_summary(): void
     {
+        /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
-        $mockService->shouldReceive('startSession')
+        $this->mockExpectation($mockService, 'startSession')
             ->once()
             ->with(['tasks:list'], false)
             ->andReturn([
@@ -37,7 +40,9 @@ final class RunCodexSessionCommandTest extends TestCase
 
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
-        $this->artisan('codex:session', ['args' => ['tasks:list']])
+        /** @var \Illuminate\Testing\PendingCommand $command */
+        $command = $this->artisan('codex:session', ['args' => ['tasks:list']]);
+        $command
             ->expectsOutput('Codex session completed.')
             ->expectsOutput('Session ID: thread-xyz')
             ->expectsOutput('JSON log file: /tmp/thread-xyz.jsonl')
@@ -45,17 +50,20 @@ final class RunCodexSessionCommandTest extends TestCase
             ->assertExitCode(Command::SUCCESS);
     }
 
-    public function testCommandReportsFailureWhenServiceThrows(): void
+    public function test_command_reports_failure_when_service_throws(): void
     {
+        /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
-        $mockService->shouldReceive('startSession')
+        $this->mockExpectation($mockService, 'startSession')
             ->once()
             ->with(['tasks:list'], false)
             ->andThrow(new \RuntimeException('bad run'));
 
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
-        $this->artisan('codex:session', ['args' => ['tasks:list']])
+        /** @var \Illuminate\Testing\PendingCommand $command */
+        $command = $this->artisan('codex:session', ['args' => ['tasks:list']]);
+        $command
             ->expectsOutput('Codex session failed: bad run')
             ->assertExitCode(Command::FAILURE);
     }

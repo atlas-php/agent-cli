@@ -18,7 +18,7 @@ class AgentCliServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(CodexCliSessionService::class, static function (): CodexCliSessionService {
-            return new CodexCliSessionService();
+            return new CodexCliSessionService;
         });
     }
 

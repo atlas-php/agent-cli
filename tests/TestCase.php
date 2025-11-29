@@ -6,6 +6,8 @@ namespace Atlas\Agent\Tests;
 
 use Atlas\Agent\Providers\AgentCliServiceProvider;
 use Mockery;
+use Mockery\ExpectationInterface;
+use Mockery\MockInterface;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
 
 /**
@@ -20,7 +22,7 @@ abstract class TestCase extends OrchestraTestCase
         parent::setUp();
 
         $storagePath = $this->storagePath();
-        if (!is_dir($storagePath)) {
+        if (! is_dir($storagePath)) {
             mkdir($storagePath, 0777, true);
         }
 
@@ -46,6 +48,21 @@ abstract class TestCase extends OrchestraTestCase
 
     private function storagePath(): string
     {
-        return __DIR__ . '/storage';
+        return __DIR__.'/storage';
+    }
+
+    /**
+     * @template T of MockInterface
+     *
+     * @param  T  $mock
+     *
+     * @phpstan-return \Mockery\Expectation
+     */
+    protected function mockExpectation(MockInterface $mock, string $method): ExpectationInterface
+    {
+        /** @var ExpectationInterface $expectation */
+        $expectation = $mock->shouldReceive($method);
+
+        return $expectation;
     }
 }

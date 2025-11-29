@@ -19,6 +19,7 @@ class CodexCliSessionService
 {
     /**
      * @param  array<int, string>  $arguments
+     * @return array{session_id: string, json_file_path: string|null, exit_code: int|null}
      */
     public function startSession(array $arguments, bool $interactive = false): array
     {
@@ -72,7 +73,7 @@ class CodexCliSessionService
 
         $process->run();
 
-        if (!$process->isSuccessful()) {
+        if (! $process->isSuccessful()) {
             throw new ProcessFailedException($process);
         }
 
@@ -92,11 +93,12 @@ class CodexCliSessionService
         $jsonHandle = fopen($jsonFilePath, 'ab');
 
         if ($jsonHandle === false) {
-            throw new RuntimeException('Unable to open JSON log file for writing: ' . $jsonFilePath);
+            throw new RuntimeException('Unable to open JSON log file for writing: '.$jsonFilePath);
         }
 
         $jsonBuffer = '';
         $codexSessionId = null;
+        /** @var array{pending_items: array<string, string>} $jsonState */
         $jsonState = [
             'pending_items' => [],
         ];
@@ -106,6 +108,7 @@ class CodexCliSessionService
                 if ($type === Process::OUT) {
                     $jsonBuffer .= $buffer;
                     $this->processJsonBuffer($jsonBuffer, $jsonHandle, $codexSessionId, $jsonState);
+
                     return;
                 }
 
@@ -122,7 +125,7 @@ class CodexCliSessionService
             fclose($jsonHandle);
         }
 
-        if (!$process->isSuccessful()) {
+        if (! $process->isSuccessful()) {
             throw new ProcessFailedException($process);
         }
 
@@ -148,11 +151,11 @@ class CodexCliSessionService
     {
         $directory = storage_path('app/codex_sessions');
 
-        if (!is_dir($directory)) {
+        if (! is_dir($directory)) {
             mkdir($directory, 0755, true);
         }
 
-        return $directory . DIRECTORY_SEPARATOR . $sessionId . '.jsonl';
+        return $directory.DIRECTORY_SEPARATOR.$sessionId.'.jsonl';
     }
 
     private function stripEscapeSequences(string $text): string
@@ -174,7 +177,7 @@ class CodexCliSessionService
 
     /**
      * @param  resource  $jsonHandle
-     * @param  array<string, string>  $state
+     * @param  array{pending_items: array<string, string>}  $state
      */
     private function processJsonBuffer(string &$buffer, $jsonHandle, ?string &$codexSessionId, array &$state): void
     {
@@ -187,7 +190,7 @@ class CodexCliSessionService
 
     /**
      * @param  resource  $jsonHandle
-     * @param  array<string, mixed>  $state
+     * @param  array{pending_items: array<string, string>}  $state
      */
     private function processJsonLine(string $line, $jsonHandle, ?string &$codexSessionId, array &$state): void
     {
@@ -197,12 +200,13 @@ class CodexCliSessionService
             return;
         }
 
-        fwrite($jsonHandle, $rawLine . "\n");
+        fwrite($jsonHandle, $rawLine."\n");
 
         $decoded = json_decode($trimmed, true);
 
-        if (!is_array($decoded)) {
-            $this->streamToTerminal(Process::OUT, $trimmed . "\n");
+        if (! is_array($decoded)) {
+            $this->streamToTerminal(Process::OUT, $trimmed."\n");
+
             return;
         }
 
@@ -215,7 +219,7 @@ class CodexCliSessionService
 
     /**
      * @param  array<string, mixed>  $event
-     * @param  array<string, mixed>  $state
+     * @param  array{pending_items: array<string, string>}  $state
      */
     private function renderCodexEvent(array $event, ?string &$codexSessionId, array &$state): ?string
     {
@@ -229,7 +233,7 @@ class CodexCliSessionService
 
                 return $this->formatLines([
                     'thread started',
-                    $codexSessionId !== null ? 'session id: ' . $codexSessionId : null,
+                    $codexSessionId !== null ? 'session id: '.$codexSessionId : null,
                 ]);
 
             case 'turn.started':
@@ -249,14 +253,14 @@ class CodexCliSessionService
         }
 
         return $this->formatLines([
-            'event: ' . $type,
-            json_encode($event, JSON_PRETTY_PRINT),
+            'event: '.$type,
+            json_encode($event, JSON_PRETTY_PRINT) ?: '{}',
         ]);
     }
 
     /**
      * @param  array<string, mixed>  $item
-     * @param  array<string, mixed>  $state
+     * @param  array{pending_items: array<string, string>}  $state
      */
     private function renderItemEvent(string $phase, array $item, array &$state): ?string
     {
@@ -268,7 +272,7 @@ class CodexCliSessionService
             'command_execution' => $this->renderCommandExecutionItem($phase, $item, $state),
             default => $this->formatLines([
                 sprintf('item (%s) %s', $itemType !== '' ? $itemType : 'unknown', $phase),
-                json_encode($item, JSON_PRETTY_PRINT),
+                json_encode($item, JSON_PRETTY_PRINT) ?: '{}',
             ]),
         };
     }
@@ -309,7 +313,7 @@ class CodexCliSessionService
 
     /**
      * @param  array<string, mixed>  $item
-     * @param  array<string, string>  $state
+     * @param  array{pending_items: array<string, string>}  $state
      */
     private function renderCommandExecutionItem(string $phase, array $item, array &$state): ?string
     {
@@ -342,7 +346,7 @@ class CodexCliSessionService
 
         $lines = [];
 
-        if ($phase === 'completed' && !$hasPending && $command !== '') {
+        if ($phase === 'completed' && ! $hasPending && $command !== '') {
             $lines[] = 'exec';
             $lines[] = $command;
         }
@@ -352,7 +356,7 @@ class CodexCliSessionService
         }
 
         if ($exitCode !== null && $phase === 'completed') {
-            $lines[] = 'exit code: ' . $exitCode;
+            $lines[] = 'exit code: '.$exitCode;
         }
 
         return $this->formatLines($lines);
@@ -374,15 +378,15 @@ class CodexCliSessionService
         $lines = ['tokens used'];
 
         if ($input !== null) {
-            $line = 'input: ' . number_format((int) $input);
+            $line = 'input: '.number_format((int) $input);
             if ($cached !== null) {
-                $line .= ' (cached: ' . number_format((int) $cached) . ')';
+                $line .= ' (cached: '.number_format((int) $cached).')';
             }
             $lines[] = $line;
         }
 
         if ($output !== null) {
-            $lines[] = 'output: ' . number_format((int) $output);
+            $lines[] = 'output: '.number_format((int) $output);
         }
 
         return $this->formatLines($lines);
@@ -401,10 +405,10 @@ class CodexCliSessionService
             return null;
         }
 
-        return implode("\n", $filtered) . "\n";
+        return implode("\n", $filtered)."\n";
     }
 
-    private function streamToTerminal(string $type, string $cleanBuffer): void
+    protected function streamToTerminal(string $type, string $cleanBuffer): void
     {
         $stream = $type === Process::OUT ? STDOUT : STDERR;
 

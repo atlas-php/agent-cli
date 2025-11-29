@@ -6,6 +6,7 @@ namespace Atlas\Agent\Tests\Feature;
 
 use Atlas\Agent\Tests\Support\TestCodexCliSessionService;
 use Atlas\Agent\Tests\TestCase;
+use Illuminate\Support\Str;
 use Mockery;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
@@ -17,11 +18,12 @@ use Symfony\Component\Process\Process;
  */
 final class CodexCliSessionServiceTest extends TestCase
 {
-    public function testHeadlessSessionStreamsOutputAndStoresLog(): void
+    public function test_headless_session_streams_output_and_stores_log(): void
     {
         $this->cleanCodexDirectory();
 
-        $service = new TestCodexCliSessionService();
+        $service = new TestCodexCliSessionService;
+        /** @var Process&\Mockery\MockInterface $process */
         $process = Mockery::mock(Process::class);
 
         $events = [
@@ -31,21 +33,34 @@ final class CodexCliSessionServiceTest extends TestCase
             ['type' => 'turn.completed', 'usage' => ['input_tokens' => 1200, 'output_tokens' => 345]],
         ];
 
-        $process->shouldReceive('setTimeout')->once()->with(null)->andReturnNull();
-        $process->shouldReceive('setIdleTimeout')->once()->with(null)->andReturnNull();
-        $process->shouldReceive('run')->once()->andReturnUsing(function (callable $callback) use ($events): void {
-            foreach ($events as $event) {
-                $callback(Process::OUT, json_encode($event) . "\n");
-            }
-        });
-        $process->shouldReceive('isSuccessful')->once()->andReturn(true);
-        $process->shouldReceive('getExitCode')->once()->andReturn(0);
+        $this->mockExpectation($process, 'setTimeout')
+            ->once()
+            ->with(null)
+            ->andReturnSelf();
+        $this->mockExpectation($process, 'setIdleTimeout')
+            ->once()
+            ->with(null)
+            ->andReturnSelf();
+        $this->mockExpectation($process, 'run')
+            ->once()
+            ->andReturnUsing(function (callable $callback) use ($events): int {
+                foreach ($events as $event) {
+                    $callback(Process::OUT, json_encode($event)."\n");
+                }
+
+                return 0;
+            });
+        $this->mockExpectation($process, 'isSuccessful')
+            ->once()
+            ->andReturn(true);
+        $this->mockExpectation($process, 'getExitCode')
+            ->once()
+            ->andReturn(0);
 
         $service->headlessProcess = $process;
 
-        ob_start();
         $result = $service->startSession(['tasks:list'], false);
-        $output = ob_get_clean() ?: '';
+        $output = $service->streamedOutput[Process::OUT] ?? '';
 
         $this->assertSame('thread-123', $result['session_id']);
         $this->assertSame(0, $result['exit_code']);
@@ -62,24 +77,41 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertStringContainsString('tokens used', $output);
     }
 
-    public function testHeadlessSessionThrowsWhenProcessFails(): void
+    public function test_headless_session_throws_when_process_fails(): void
     {
         $this->cleanCodexDirectory();
 
-        $service = new TestCodexCliSessionService();
+        $service = new TestCodexCliSessionService;
+        /** @var Process&\Mockery\MockInterface $process */
         $process = Mockery::mock(Process::class);
 
-        $process->shouldReceive('setTimeout')->once()->with(null)->andReturnNull();
-        $process->shouldReceive('setIdleTimeout')->once()->with(null)->andReturnNull();
-        $process->shouldReceive('run')->once()->andReturnNull();
-        $process->shouldReceive('isSuccessful')->once()->andReturn(false);
-        $process->shouldReceive('getCommandLine')->andReturn('codex exec --json tasks:list');
-        $process->shouldReceive('getExitCode')->andReturn(1);
-        $process->shouldReceive('getExitCodeText')->andReturn('General error');
-        $process->shouldReceive('getWorkingDirectory')->andReturn(getcwd() ?: '');
-        $process->shouldReceive('isOutputDisabled')->andReturn(false);
-        $process->shouldReceive('getOutput')->andReturn('');
-        $process->shouldReceive('getErrorOutput')->andReturn('failure');
+        $this->mockExpectation($process, 'setTimeout')
+            ->once()
+            ->with(null)
+            ->andReturnSelf();
+        $this->mockExpectation($process, 'setIdleTimeout')
+            ->once()
+            ->with(null)
+            ->andReturnSelf();
+        $this->mockExpectation($process, 'run')
+            ->once()
+            ->andReturn(1);
+        $this->mockExpectation($process, 'isSuccessful')
+            ->andReturn(false);
+        $this->mockExpectation($process, 'getCommandLine')
+            ->andReturn('codex exec --json tasks:list');
+        $this->mockExpectation($process, 'getExitCode')
+            ->andReturn(1);
+        $this->mockExpectation($process, 'getExitCodeText')
+            ->andReturn('General error');
+        $this->mockExpectation($process, 'getWorkingDirectory')
+            ->andReturn(getcwd() ?: '');
+        $this->mockExpectation($process, 'isOutputDisabled')
+            ->andReturn(false);
+        $this->mockExpectation($process, 'getOutput')
+            ->andReturn('');
+        $this->mockExpectation($process, 'getErrorOutput')
+            ->andReturn('failure');
 
         $service->headlessProcess = $process;
 
@@ -87,15 +119,52 @@ final class CodexCliSessionServiceTest extends TestCase
         $service->startSession(['tasks:list'], false);
     }
 
+    public function test_interactive_session_returns_exit_code_without_json_log(): void
+    {
+        $service = new TestCodexCliSessionService;
+        /** @var Process&\Mockery\MockInterface $process */
+        $process = Mockery::mock(Process::class);
+
+        $this->mockExpectation($process, 'setTimeout')
+            ->once()
+            ->with(null)
+            ->andReturnSelf();
+        $this->mockExpectation($process, 'setIdleTimeout')
+            ->once()
+            ->with(null)
+            ->andReturnSelf();
+        $this->mockExpectation($process, 'setTty')
+            ->once()
+            ->with(true)
+            ->andReturnSelf();
+        $this->mockExpectation($process, 'run')
+            ->once()
+            ->andReturn(0);
+        $this->mockExpectation($process, 'isSuccessful')
+            ->once()
+            ->andReturn(true);
+        $this->mockExpectation($process, 'getExitCode')
+            ->once()
+            ->andReturn(0);
+
+        $service->interactiveProcess = $process;
+
+        $result = $service->startSession(['tasks:list'], true);
+
+        $this->assertTrue(Str::isUuid($result['session_id']));
+        $this->assertSame(0, $result['exit_code']);
+        $this->assertNull($result['json_file_path']);
+    }
+
     private function cleanCodexDirectory(): void
     {
         $directory = storage_path('app/codex_sessions');
 
-        if (!is_dir($directory)) {
+        if (! is_dir($directory)) {
             return;
         }
 
-        $files = glob($directory . DIRECTORY_SEPARATOR . '*');
+        $files = glob($directory.DIRECTORY_SEPARATOR.'*');
         if ($files === false) {
             return;
         }

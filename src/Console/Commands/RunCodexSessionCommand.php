@@ -17,7 +17,7 @@ class RunCodexSessionCommand extends Command
     /**
      * @var string
      */
-    protected $signature = 'codex:session {args* : Arguments to pass to the Codex CLI} {--interactive : Run Codex attached to your terminal without logging}';
+    protected $signature = 'codex:session {args?* : Arguments to pass to the Codex CLI} {--interactive : Run Codex attached to your terminal without logging}';
 
     /**
      * @var string
@@ -34,10 +34,23 @@ class RunCodexSessionCommand extends Command
 
     public function handle(): int
     {
-        $arguments = $this->argument('args') ?? [];
+        $rawArguments = $this->argument('args');
+        $arguments = [];
+
+        if (is_array($rawArguments)) {
+            foreach ($rawArguments as $argument) {
+                if ($argument === null) {
+                    continue;
+                }
+                $arguments[] = (string) $argument;
+            }
+        } elseif (is_scalar($rawArguments) && $rawArguments !== '') {
+            $arguments[] = (string) $rawArguments;
+        }
 
         if (count($arguments) === 0) {
             $this->error('You must provide arguments for the Codex CLI.');
+
             return self::FAILURE;
         }
 
@@ -46,15 +59,16 @@ class RunCodexSessionCommand extends Command
         try {
             $result = $this->sessionService->startSession($arguments, $interactive);
         } catch (\Throwable $exception) {
-            $this->error('Codex session failed: ' . $exception->getMessage());
+            $this->error('Codex session failed: '.$exception->getMessage());
+
             return self::FAILURE;
         }
 
         $this->newLine();
         $this->info('Codex session completed.');
-        $this->line('Session ID: ' . $result['session_id']);
-        $this->line('JSON log file: ' . ($result['json_file_path'] ?? 'N/A (interactive)'));
-        $this->line('Exit code: ' . $result['exit_code']);
+        $this->line('Session ID: '.$result['session_id']);
+        $this->line('JSON log file: '.($result['json_file_path'] ?? 'N/A (interactive)'));
+        $this->line('Exit code: '.$result['exit_code']);
 
         return $result['exit_code'] ?? self::SUCCESS;
     }
