@@ -1,0 +1,53 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Illuminate\Contracts\Console\Kernel as ConsoleKernel;
+use Orchestra\Testbench\Foundation\Application as TestbenchApplication;
+use Symfony\Component\Console\Input\ArgvInput;
+use Symfony\Component\Console\Output\ConsoleOutput;
+
+require __DIR__.'/../vendor/autoload.php';
+
+$app = TestbenchApplication::create(
+    basePath: __DIR__,
+    options: [
+        'extra' => [
+            'env' => [
+                'APP_ENV=sandbox',
+                'APP_NAME="Atlas Agent Sandbox"',
+                'APP_DEBUG=true',
+                'APP_KEY=base64:Gh4H4H8R0+4Zq7v7Zk9x4Xhbrv4f3hiL4msmJoDliAQ=',
+            ],
+            'providers' => [
+                Atlas\Agent\Providers\AgentCliServiceProvider::class,
+            ],
+            'dont-discover' => [
+                // Keep package discovery limited to the sandbox runtime only.
+            ],
+        ],
+    ],
+);
+
+$storagePath = __DIR__.'/storage';
+if (! is_dir($storagePath)) {
+    mkdir($storagePath, 0775, true);
+}
+$app->useStoragePath($storagePath);
+
+$config = $app->make('config');
+$config->set('app.key', 'base64:Gh4H4H8R0+4Zq7v7Zk9x4Xhbrv4f3hiL4msmJoDliAQ=');
+$config->set('database.default', 'array');
+$config->set('database.connections.array', ['driver' => 'array']);
+
+/** @var ConsoleKernel $kernel */
+$kernel = $app->make(ConsoleKernel::class);
+
+$input = new ArgvInput();
+$output = new ConsoleOutput();
+
+$status = $kernel->handle($input, $output);
+$kernel->terminate($input, $status);
+
+exit($status);

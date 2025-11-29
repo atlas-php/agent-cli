@@ -57,6 +57,16 @@ $result = app(CodexCliSessionService::class)->startSession([
 
 The service handles both interactive and headless runs, automatically sanitizes ANSI escape sequences, streams events to STDOUT/STDERR, and records every Codex JSON event to a JSON Lines log.
 
+## Local Sandbox
+
+The repository ships with a minimal Laravel sandbox so you can run the `codex:session` command without installing the package into a real application. The sandbox has no database and only registers the Agent CLI service provider.
+
+```bash
+php sandbox/artisan codex:session -- tasks:list --plan
+```
+
+JSON transcripts are stored inside `sandbox/storage/app/codex_sessions`. Pass `--interactive` to talk directly to Codex without log files.
+
 ## Testing
 
 Run Pint, PHPUnit, and Larastan from the package root:
