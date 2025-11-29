@@ -1,6 +1,24 @@
 # Atlas Agent CLI
 
-Atlas Agent CLI is a Laravel-ready wrapper around the Codex coding agent CLI. It provides a reusable service plus an Artisan command that streams Codex output, strips ANSI escape characters, records event logs to JSONL files, and displays a summarized transcript in real time.
+[![Build](https://github.com/atlas-php/agent-cli/actions/workflows/tests.yml/badge.svg)](https://github.com/atlas-php/agent-cli/actions/workflows/tests.yml)
+[![coverage](https://codecov.io/github/atlas-php/agent-cli/branch/main/graph/badge.svg)](https://codecov.io/github/atlas-php/agent-cli)
+[![License](https://img.shields.io/github/license/atlas-php/agent-cli.svg)](LICENSE)
+
+**Atlas Agent CLI** is a Laravel-ready wrapper around the Codex coding agent CLI. It exposes an Artisan command and service layer that stream Codex output, sanitize ANSI characters, persist JSONL logs, and report a summarized transcript in real time.
+
+## Table of Contents
+- [Overview](#overview)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Artisan Command](#artisan-command)
+  - [Service](#service)
+- [Local Sandbox](#local-sandbox)
+- [Testing](#testing)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Overview
+Agent CLI mirrors the raw `codex` CLI while layering Laravel-native ergonomics: streaming output, ANSI sanitizing, JSON Lines logging, and command/service APIs for both interactive and headless sessions.
 
 ## Installation
 
@@ -77,6 +95,8 @@ composer test
 composer analyse
 ```
 
-## License
+## Contributing
+See the [Contributing Guide](./.github/CONTRIBUTING.md) and [Agents](./AGENTS.md).
 
-The Atlas Agent CLI package is open-sourced software licensed under the [MIT license](LICENSE).
+## License
+MIT — see [LICENSE](./LICENSE).
