@@ -27,7 +27,7 @@ final class RunCodexSessionCommandTest extends TestCase
 
     public function test_command_runs_session_and_prints_summary(): void
     {
-        config()->set('atlas-agent-cli.model', 'gpt-5.1-codex-max');
+        config()->set('atlas-agent-cli.model.codex', 'gpt-5.1-codex-max');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
@@ -54,7 +54,7 @@ final class RunCodexSessionCommandTest extends TestCase
 
     public function test_command_reports_failure_when_service_throws(): void
     {
-        config()->set('atlas-agent-cli.model', null);
+        config()->set('atlas-agent-cli.model.codex', null);
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
@@ -74,7 +74,7 @@ final class RunCodexSessionCommandTest extends TestCase
 
     public function test_command_can_override_model_via_option(): void
     {
-        config()->set('atlas-agent-cli.model', 'gpt-5.1-codex-max');
+        config()->set('atlas-agent-cli.model.codex', 'gpt-5.1-codex-max');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
@@ -101,7 +101,7 @@ final class RunCodexSessionCommandTest extends TestCase
 
     public function test_command_passes_combined_user_arguments_as_initial_input(): void
     {
-        config()->set('atlas-agent-cli.model', null);
+        config()->set('atlas-agent-cli.model.codex', null);
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
@@ -123,7 +123,7 @@ final class RunCodexSessionCommandTest extends TestCase
 
     public function test_command_forwards_workspace_option_to_service(): void
     {
-        config()->set('atlas-agent-cli.model', null);
+        config()->set('atlas-agent-cli.model.codex', null);
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
@@ -148,7 +148,7 @@ final class RunCodexSessionCommandTest extends TestCase
 
     public function test_command_forwards_instructions_option(): void
     {
-        config()->set('atlas-agent-cli.model', null);
+        config()->set('atlas-agent-cli.model.codex', null);
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
@@ -173,7 +173,7 @@ final class RunCodexSessionCommandTest extends TestCase
 
     public function test_command_forwards_meta_option(): void
     {
-        config()->set('atlas-agent-cli.model', null);
+        config()->set('atlas-agent-cli.model.codex', null);
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
@@ -198,7 +198,7 @@ final class RunCodexSessionCommandTest extends TestCase
 
     public function test_command_fails_when_meta_option_is_invalid_json(): void
     {
-        config()->set('atlas-agent-cli.model', null);
+        config()->set('atlas-agent-cli.model.codex', null);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
         $command = $this->artisan('codex:session', [
@@ -212,7 +212,7 @@ final class RunCodexSessionCommandTest extends TestCase
 
     public function test_command_can_resume_existing_thread(): void
     {
-        config()->set('atlas-agent-cli.model', null);
+        config()->set('atlas-agent-cli.model.codex', null);
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);

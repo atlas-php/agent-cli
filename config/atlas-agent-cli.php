@@ -36,14 +36,18 @@ return [
     | Default Codex Runtime Options
     |--------------------------------------------------------------------------
     |
-    | Control which model Codex should use whenever the `codex:session` command
-    | forwards requests. This value may be overridden per invocation through the
-    | command's --model option or by explicitly passing Codex CLI flags via args.
+    | Control which model each provider should use whenever the `codex:session`
+    | command forwards requests. Values are keyed by provider so you can set
+    | defaults for multiple providers. Each value may be overridden per
+    | invocation through the command's --model option or by explicitly passing
+    | Codex CLI flags via args.
     |
     | Supported options today: gpt-5.1-codex-max, gpt-5.1-codex, gpt-5.1-codex-mini.
     |
     */
-    'model' => env('ATLAS_AGENT_CLI_MODEL', 'gpt-5.1-codex-max'),
+    'model' => [
+        'codex' => env('ATLAS_AGENT_CLI_MODEL_CODEX', 'gpt-5.1-codex-max'),
+    ],
 
     /*
     |--------------------------------------------------------------------------

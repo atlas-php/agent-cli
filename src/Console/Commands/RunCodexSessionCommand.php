@@ -14,6 +14,8 @@ use Illuminate\Console\Command;
  */
 class RunCodexSessionCommand extends Command
 {
+    private const PROVIDER = 'codex';
+
     /**
      * @var string
      */
@@ -150,10 +152,17 @@ class RunCodexSessionCommand extends Command
             return $option;
         }
 
-        $configured = config('atlas-agent-cli.model');
-        if (is_string($configured)) {
-            $configured = trim($configured);
+        $configured = config('atlas-agent-cli.model.'.self::PROVIDER);
+
+        if (! is_string($configured)) {
+            $configured = config('atlas-agent-cli.model');
+
+            if (is_array($configured)) {
+                $configured = $configured[self::PROVIDER] ?? null;
+            }
         }
+
+        $configured = is_string($configured) ? trim($configured) : $configured;
 
         return is_string($configured) && $configured !== '' ? $configured : null;
     }
