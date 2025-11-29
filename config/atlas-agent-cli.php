@@ -44,4 +44,21 @@ return [
     |
     */
     'model' => env('ATLAS_AGENT_CLI_MODEL', 'gpt-5.1-codex-max'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Task and Instruction Format
+    |--------------------------------------------------------------------------
+    |
+    | Optional template that combines the user task and any additional system
+    | instructions before they are forwarded to Codex. Use {TASK} and
+    | {INSTRUCTIONS} placeholders to control how the final request is shaped.
+    | The raw template and rendered output are both logged in the workspace
+    | event so you can see exactly what Codex receives.
+    |
+    */
+    'template' => [
+        'task' => 'Task: {TASK}',
+        'instructions' => 'Instructions: {INSTRUCTIONS}',
+    ],
 ];

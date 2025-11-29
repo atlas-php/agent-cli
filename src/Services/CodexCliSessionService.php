@@ -139,28 +139,51 @@ class CodexCliSessionService
 
         $jsonBuffer = '';
         $codexSessionId = $resumeThreadId !== null && $resumeThreadId !== '' ? $resumeThreadId : null;
+        $taskFormatTemplates = $this->resolveTaskFormatTemplates();
+        $trimmedTask = $initialUserInput !== null ? trim($initialUserInput) : null;
+        $trimmedInstructions = $systemInstructions !== null ? trim($systemInstructions) : null;
         /**
          * @var array{
          *     pending_items: array<string, string>,
          *     initial_user_input: string|null,
+         *     formatted_task: string|null,
          *     system_instructions: string|null,
          *     thread_request_logged: bool,
          *     thread_request_meta: array<string, mixed>,
          *     resumed_thread_id: string|null,
          *     workspace_event_logged: bool,
          *     workspace_event: array<string, mixed>|null,
+         *     task_format_template_task: string|null,
+         *     task_format_template_instructions: string|null,
+         *     task_format_rendered_task: string|null,
+         *     task_format_rendered_instructions: string|null,
          * } $jsonState
          */
         $jsonState = [
             'pending_items' => [],
-            'initial_user_input' => $initialUserInput !== null ? trim($initialUserInput) : null,
-            'system_instructions' => $systemInstructions !== null ? trim($systemInstructions) : null,
+            'initial_user_input' => $trimmedTask,
+            'formatted_task' => null,
+            'system_instructions' => $trimmedInstructions,
             'thread_request_logged' => false,
             'thread_request_meta' => is_array($threadRequestMeta) ? $threadRequestMeta : [],
             'resumed_thread_id' => $resumeThreadId !== null && trim($resumeThreadId) !== '' ? trim($resumeThreadId) : null,
             'workspace_event_logged' => false,
-            'workspace_event' => $this->buildWorkspaceEvent($arguments, $workspacePath),
+            'workspace_event' => null,
+            'task_format_template_task' => $taskFormatTemplates['task'],
+            'task_format_template_instructions' => $taskFormatTemplates['instructions'],
+            'task_format_rendered_task' => null,
+            'task_format_rendered_instructions' => null,
         ];
+        $this->refreshFormattedTask($jsonState);
+        $jsonState['workspace_event'] = $this->buildWorkspaceEvent(
+            $arguments,
+            $workspacePath,
+            $jsonState['task_format_template_task'],
+            $jsonState['task_format_template_instructions'],
+            $jsonState['task_format_rendered_task'],
+            $jsonState['task_format_rendered_instructions'],
+            $jsonState['formatted_task']
+        );
 
         $this->maybeLogWorkspaceEvent($jsonHandle, $codexSessionId, $jsonState);
         $this->maybeLogThreadLifecycleEvent($jsonHandle, $codexSessionId, $jsonState);
@@ -304,8 +327,15 @@ class CodexCliSessionService
      * @param  array<int, string>  $arguments
      * @return array<string, mixed>|null
      */
-    private function buildWorkspaceEvent(array $arguments, ?string $workspacePath): ?array
-    {
+    private function buildWorkspaceEvent(
+        array $arguments,
+        ?string $workspacePath,
+        ?string $taskTemplate,
+        ?string $instructionsTemplate,
+        ?string $renderedTask,
+        ?string $renderedInstructions,
+        ?string $combined
+    ): ?array {
         if ($workspacePath === null) {
             return null;
         }
@@ -328,6 +358,15 @@ class CodexCliSessionService
         if ($model !== null) {
             $event['model'] = $model;
         }
+
+        $event = $this->maybeAttachTaskFormat(
+            $event,
+            $taskTemplate,
+            $instructionsTemplate,
+            $renderedTask,
+            $renderedInstructions,
+            $combined
+        );
 
         return $event;
     }
@@ -385,6 +424,144 @@ class CodexCliSessionService
         return null;
     }
 
+    /**
+     * @return array{task: string|null, instructions: string|null}
+     */
+    private function resolveTaskFormatTemplates(): array
+    {
+        $templateConfig = null;
+
+        if (function_exists('config')) {
+            $templateConfig = [
+                'task' => config('atlas-agent-cli.template.task'),
+                'instructions' => config('atlas-agent-cli.template.instructions'),
+            ];
+        }
+
+        $taskTemplate = null;
+        $instructionsTemplate = null;
+
+        $taskTemplate = is_string($templateConfig['task'] ?? null) ? trim((string) $templateConfig['task']) : null;
+        $instructionsTemplate = is_string($templateConfig['instructions'] ?? null) ? trim((string) $templateConfig['instructions']) : null;
+
+        return [
+            'task' => $taskTemplate !== '' ? $taskTemplate : null,
+            'instructions' => $instructionsTemplate !== '' ? $instructionsTemplate : null,
+        ];
+    }
+
+    /**
+     * @param  array{task: string|null, instructions: string|null}  $templates
+     * @return array{task: string|null, instructions: string|null, combined: string|null}
+     */
+    private function renderTaskFormat(array $templates, ?string $task, ?string $instructions): array
+    {
+        $renderedTask = $this->renderTemplatePart($templates['task'] ?? null, $task, $instructions);
+        $renderedInstructions = $this->renderTemplatePart($templates['instructions'] ?? null, $task, $instructions);
+
+        $combined = implode("\n", array_values(array_filter([
+            $renderedTask,
+            $renderedInstructions,
+        ], static fn (?string $value) => $value !== null && $value !== '')));
+        $combined = trim($combined);
+
+        return [
+            'task' => $renderedTask !== '' ? $renderedTask : null,
+            'instructions' => $renderedInstructions !== '' ? $renderedInstructions : null,
+            'combined' => $combined !== '' ? $combined : null,
+        ];
+    }
+
+    private function renderTemplatePart(?string $template, ?string $task, ?string $instructions): ?string
+    {
+        if ($template === null || $template === '') {
+            return null;
+        }
+
+        $rendered = str_replace(
+            ['{TASK}', '{INSTRUCTIONS}'],
+            [$task ?? '', $instructions ?? ''],
+            $template
+        );
+        $trimmed = trim($rendered);
+
+        return $trimmed !== '' ? $trimmed : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     * @return array<string, mixed>
+     */
+    private function maybeAttachTaskFormat(
+        array $event,
+        ?string $taskTemplate,
+        ?string $instructionsTemplate,
+        ?string $renderedTask,
+        ?string $renderedInstructions,
+        ?string $combined
+    ): array {
+        $templatePayload = array_filter([
+            'task' => $taskTemplate !== null && trim($taskTemplate) !== '' ? trim($taskTemplate) : null,
+            'instructions' => $instructionsTemplate !== null && trim($instructionsTemplate) !== '' ? trim($instructionsTemplate) : null,
+        ], static fn ($value) => $value !== null && $value !== '');
+
+        if ($templatePayload !== []) {
+            $event['task_format_template'] = $templatePayload;
+        }
+
+        $renderedPayload = array_filter([
+            'task' => $renderedTask !== null && trim($renderedTask) !== '' ? trim($renderedTask) : null,
+            'instructions' => $renderedInstructions !== null && trim($renderedInstructions) !== '' ? trim($renderedInstructions) : null,
+            'combined' => $combined !== null && trim($combined) !== '' ? trim($combined) : null,
+        ], static fn ($value) => $value !== null && $value !== '');
+
+        if ($renderedPayload !== []) {
+            $event['task_format_rendered'] = $renderedPayload;
+        }
+
+        return $event;
+    }
+
+    /**
+     * @param  array{
+     *     pending_items: array<string, string>,
+     *     initial_user_input: string|null,
+     *     formatted_task: string|null,
+     *     system_instructions: string|null,
+     *     thread_request_logged: bool,
+     *     thread_request_meta: array<string, mixed>,
+     *     resumed_thread_id: string|null,
+     *     workspace_event_logged: bool,
+     *     workspace_event: array<string, mixed>|null,
+     *     task_format_template_task: string|null,
+     *     task_format_template_instructions: string|null,
+     *     task_format_rendered_task: string|null,
+     *     task_format_rendered_instructions: string|null,
+     * }  $state
+     */
+    private function refreshFormattedTask(array &$state): void
+    {
+        $templates = [
+            'task' => isset($state['task_format_template_task']) ? trim((string) $state['task_format_template_task']) : '',
+            'instructions' => isset($state['task_format_template_instructions']) ? trim((string) $state['task_format_template_instructions']) : '',
+        ];
+        $task = isset($state['initial_user_input']) ? trim((string) $state['initial_user_input']) : '';
+        $instructions = isset($state['system_instructions']) ? trim((string) $state['system_instructions']) : '';
+
+        $rendered = $this->renderTaskFormat(
+            [
+                'task' => $templates['task'] !== '' ? $templates['task'] : null,
+                'instructions' => $templates['instructions'] !== '' ? $templates['instructions'] : null,
+            ],
+            $task !== '' ? $task : null,
+            $instructions !== '' ? $instructions : null
+        );
+
+        $state['formatted_task'] = $rendered['combined'];
+        $state['task_format_rendered_task'] = $rendered['task'];
+        $state['task_format_rendered_instructions'] = $rendered['instructions'];
+    }
+
     private function stripEscapeSequences(string $text): string
     {
         $patterns = [
@@ -407,12 +584,17 @@ class CodexCliSessionService
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
+     *     formatted_task: string|null,
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
      *     resumed_thread_id: string|null,
      *     workspace_event_logged: bool,
-     *     workspace_event: array<string, mixed>|null
+     *     workspace_event: array<string, mixed>|null,
+     *     task_format_template_task: string|null,
+     *     task_format_template_instructions: string|null,
+     *     task_format_rendered_task: string|null,
+     *     task_format_rendered_instructions: string|null,
      * }  $state
      */
     private function processJsonBuffer(string &$buffer, $jsonHandle, ?string &$codexSessionId, array &$state): void
@@ -429,12 +611,17 @@ class CodexCliSessionService
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
+     *     formatted_task: string|null,
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
      *     resumed_thread_id: string|null,
      *     workspace_event_logged: bool,
-     *     workspace_event: array<string, mixed>|null
+     *     workspace_event: array<string, mixed>|null,
+     *     task_format_template_task: string|null,
+     *     task_format_template_instructions: string|null,
+     *     task_format_rendered_task: string|null,
+     *     task_format_rendered_instructions: string|null,
      * }  $state
      */
     private function processJsonLine(string $line, $jsonHandle, ?string &$codexSessionId, array &$state): void
@@ -470,12 +657,17 @@ class CodexCliSessionService
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
+     *     formatted_task: string|null,
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
      *     resumed_thread_id: string|null,
      *     workspace_event_logged: bool,
      *     workspace_event: array<string, mixed>|null,
+     *     task_format_template_task: string|null,
+     *     task_format_template_instructions: string|null,
+     *     task_format_rendered_task: string|null,
+     *     task_format_rendered_instructions: string|null,
      * }  $state
      */
     private function maybeLogWorkspaceEvent($jsonHandle, ?string &$codexSessionId, array &$state): void
@@ -504,12 +696,17 @@ class CodexCliSessionService
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
+     *     formatted_task: string|null,
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
      *     resumed_thread_id: string|null,
      *     workspace_event_logged: bool,
      *     workspace_event: array<string, mixed>|null,
+     *     task_format_template_task: string|null,
+     *     task_format_template_instructions: string|null,
+     *     task_format_rendered_task: string|null,
+     *     task_format_rendered_instructions: string|null,
      * }  $state
      */
     private function maybeLogThreadLifecycleEvent($jsonHandle, ?string &$codexSessionId, array &$state): void
@@ -526,7 +723,10 @@ class CodexCliSessionService
             $instructions = null;
         }
 
-        $task = isset($state['initial_user_input']) ? trim((string) $state['initial_user_input']) : '';
+        $formattedTask = isset($state['formatted_task']) ? trim((string) $state['formatted_task']) : '';
+        $task = $formattedTask !== ''
+            ? $formattedTask
+            : (isset($state['initial_user_input']) ? trim((string) $state['initial_user_input']) : '');
         if ($task === '') {
             $task = null;
         }
@@ -554,8 +754,17 @@ class CodexCliSessionService
             ];
         }
 
+        $event = $this->maybeAttachTaskFormat(
+            $event,
+            $state['task_format_template_task'] ?? null,
+            $state['task_format_template_instructions'] ?? null,
+            $state['task_format_rendered_task'] ?? null,
+            $state['task_format_rendered_instructions'] ?? null,
+            $formattedTask !== '' && $formattedTask === $task ? $formattedTask : null
+        );
+
         foreach ($meta as $key => $value) {
-            if (in_array($key, ['type', 'instructions', 'task'], true)) {
+            if (in_array($key, ['type', 'instructions', 'task', 'task_format_template', 'task_format_rendered'], true)) {
                 continue;
             }
 
@@ -576,12 +785,17 @@ class CodexCliSessionService
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
+     *     formatted_task: string|null,
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
      *     resumed_thread_id: string|null,
      *     workspace_event_logged: bool,
-     *     workspace_event: array<string, mixed>|null
+     *     workspace_event: array<string, mixed>|null,
+     *     task_format_template_task: string|null,
+     *     task_format_template_instructions: string|null,
+     *     task_format_rendered_task: string|null,
+     *     task_format_rendered_instructions: string|null,
      * }  $state
      */
     private function maybeCaptureUserInputFromEvent(array $event, array &$state): void
@@ -598,6 +812,7 @@ class CodexCliSessionService
             }
 
             $state['thread_request_logged'] = true;
+            $this->refreshFormattedTask($state);
 
             return;
         }
@@ -609,6 +824,7 @@ class CodexCliSessionService
             }
 
             $state['thread_request_logged'] = true;
+            $this->refreshFormattedTask($state);
 
             return;
         }
@@ -622,6 +838,7 @@ class CodexCliSessionService
             if ($threadInput !== '') {
                 $state['initial_user_input'] = $threadInput;
             }
+            $this->refreshFormattedTask($state);
 
             return;
         }
@@ -642,6 +859,7 @@ class CodexCliSessionService
         $text = $this->extractItemText($item);
         if ($text !== null && $text !== '') {
             $state['initial_user_input'] = $text;
+            $this->refreshFormattedTask($state);
         }
     }
 
@@ -699,12 +917,17 @@ class CodexCliSessionService
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
+     *     formatted_task: string|null,
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
      *     resumed_thread_id: string|null,
      *     workspace_event_logged: bool,
-     *     workspace_event: array<string, mixed>|null
+     *     workspace_event: array<string, mixed>|null,
+     *     task_format_template_task: string|null,
+     *     task_format_template_instructions: string|null,
+     *     task_format_rendered_task: string|null,
+     *     task_format_rendered_instructions: string|null,
      * }  $state
      */
     private function renderCodexEvent(array $event, ?string &$codexSessionId, array &$state): ?string
@@ -741,6 +964,9 @@ class CodexCliSessionService
                 ]);
 
             case 'workspace':
+                $template = is_array($event['task_format_template'] ?? null) ? $event['task_format_template'] : [];
+                $renderedFormat = is_array($event['task_format_rendered'] ?? null) ? $event['task_format_rendered'] : [];
+
                 return $this->formatLines([
                     'workspace',
                     isset($event['provider']) ? 'provider: '.$event['provider'] : null,
@@ -748,6 +974,11 @@ class CodexCliSessionService
                     isset($event['platform_path']) ? 'platform: '.$event['platform_path'] : null,
                     isset($event['session_log_path']) ? 'logs: '.$event['session_log_path'] : null,
                     isset($event['model']) ? 'model: '.$event['model'] : null,
+                    isset($template['task']) ? 'task template: '.$template['task'] : null,
+                    isset($template['instructions']) ? 'instructions template: '.$template['instructions'] : null,
+                    isset($renderedFormat['task']) ? 'task rendered: '.$renderedFormat['task'] : null,
+                    isset($renderedFormat['instructions']) ? 'instructions rendered: '.$renderedFormat['instructions'] : null,
+                    isset($renderedFormat['combined']) ? 'formatted task: '.$renderedFormat['combined'] : null,
                 ]);
 
             case 'turn.started':
@@ -777,12 +1008,17 @@ class CodexCliSessionService
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
+     *     formatted_task: string|null,
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
      *     resumed_thread_id: string|null,
      *     workspace_event_logged: bool,
-     *     workspace_event: array<string, mixed>|null
+     *     workspace_event: array<string, mixed>|null,
+     *     task_format_template_task: string|null,
+     *     task_format_template_instructions: string|null,
+     *     task_format_rendered_task: string|null,
+     *     task_format_rendered_instructions: string|null,
      * }  $state
      */
     private function renderItemEvent(string $phase, array $item, array &$state): ?string
@@ -839,12 +1075,17 @@ class CodexCliSessionService
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
+     *     formatted_task: string|null,
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
      *     resumed_thread_id: string|null,
      *     workspace_event_logged: bool,
-     *     workspace_event: array<string, mixed>|null
+     *     workspace_event: array<string, mixed>|null,
+     *     task_format_template_task: string|null,
+     *     task_format_template_instructions: string|null,
+     *     task_format_rendered_task: string|null,
+     *     task_format_rendered_instructions: string|null,
      * }  $state
      */
     private function renderCommandExecutionItem(string $phase, array $item, array &$state): ?string

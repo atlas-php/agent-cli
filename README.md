@@ -99,6 +99,7 @@ The `config/atlas-agent-cli.php` file exposes:
 * `sessions.path` – base directory for JSONL transcripts. Atlas Agent CLI stores Codex logs inside `<path>/codex`. Defaults to `storage/app/sessions`.
 * `workspace.path` – the working directory Codex should execute within. Defaults to your Laravel application's base path but can be pointed at any detached workspace (override via `ATLAS_AGENT_CLI_WORKSPACE_PATH` or the `--workspace` command option for per-run overrides).
 * `model` – Codex model automatically applied to each run unless overridden with `--model` (defaults to `gpt-5.1-codex-max`). Available models are listed at [OpenAI Codex models](https://developers.openai.com/codex/models).
+* `template.task` / `template.instructions` – string templates (defaults to `Task: {TASK}` and `Instructions: {INSTRUCTIONS}`) that shape how the task and instructions are combined before forwarding them to Codex. The workspace log includes both the raw templates and the rendered request so you can see exactly what Codex receives.
 
 ## Local Sandbox
 
