@@ -33,7 +33,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=gpt-5.1-codex-max', 'tasks:list'], false)
+            ->with(['--model=gpt-5.1-codex-max', 'tasks:list'], false, 'tasks:list')
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -60,7 +60,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['tasks:list'], false)
+            ->with(['tasks:list'], false, 'tasks:list')
             ->andThrow(new \RuntimeException('bad run'));
 
         $this->app->instance(CodexCliSessionService::class, $mockService);
@@ -80,7 +80,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=o1-mini', 'tasks:list'], false)
+            ->with(['--model=o1-mini', 'tasks:list'], false, 'tasks:list')
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -97,5 +97,27 @@ final class RunCodexSessionCommandTest extends TestCase
         $command
             ->expectsOutput('Codex session completed.')
             ->assertExitCode(Command::SUCCESS);
+    }
+
+    public function test_command_passes_combined_user_arguments_as_initial_input(): void
+    {
+        config()->set('atlas-agent-cli.model', null);
+
+        /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
+        $mockService = Mockery::mock(CodexCliSessionService::class);
+        $this->mockExpectation($mockService, 'startSession')
+            ->once()
+            ->with(['tasks:list', '--plan'], false, 'tasks:list --plan')
+            ->andReturn([
+                'session_id' => 'thread-xyz',
+                'json_file_path' => '/tmp/thread-xyz.jsonl',
+                'exit_code' => 0,
+            ]);
+
+        $this->app->instance(CodexCliSessionService::class, $mockService);
+
+        /** @var \Illuminate\Testing\PendingCommand $command */
+        $command = $this->artisan('codex:session', ['args' => ['tasks:list', '--plan']]);
+        $command->assertExitCode(Command::SUCCESS);
     }
 }

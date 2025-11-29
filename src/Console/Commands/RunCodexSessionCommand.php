@@ -59,11 +59,12 @@ class RunCodexSessionCommand extends Command
             return self::FAILURE;
         }
 
+        $initialUserInput = $this->buildInitialUserInput($arguments);
         $arguments = $this->injectRuntimeOptions($arguments);
         $interactive = (bool) $this->option('interactive');
 
         try {
-            $result = $this->sessionService->startSession($arguments, $interactive);
+            $result = $this->sessionService->startSession($arguments, $interactive, $initialUserInput);
         } catch (\Throwable $exception) {
             $this->error('Codex session failed: '.$exception->getMessage());
 
@@ -97,6 +98,22 @@ class RunCodexSessionCommand extends Command
         }
 
         return array_merge($injected, $arguments);
+    }
+
+    /**
+     * @param  array<int, string>  $arguments
+     */
+    private function buildInitialUserInput(array $arguments): ?string
+    {
+        $filtered = array_values(array_filter($arguments, static function (string $argument): bool {
+            return trim($argument) !== '';
+        }));
+
+        if ($filtered === []) {
+            return null;
+        }
+
+        return implode(' ', $filtered);
     }
 
     private function resolveModelOption(): ?string

@@ -28,7 +28,7 @@ class CodexCliSessionService
      * @param  array<int, string>  $arguments
      * @return array{session_id: string, json_file_path: string|null, exit_code: int|null}
      */
-    public function startSession(array $arguments, bool $interactive = false): array
+    public function startSession(array $arguments, bool $interactive = false, ?string $initialUserInput = null): array
     {
         $sessionId = (string) Str::uuid();
 
@@ -43,7 +43,7 @@ class CodexCliSessionService
         }
 
         $jsonFilePath = $this->prepareJsonLogFile($sessionId);
-        $headlessResult = $this->runHeadless($arguments, $jsonFilePath);
+        $headlessResult = $this->runHeadless($arguments, $jsonFilePath, $initialUserInput);
         $process = $headlessResult['process'];
         $codexSessionId = $headlessResult['codex_session_id'] ?? $sessionId;
 
@@ -91,7 +91,7 @@ class CodexCliSessionService
      * @param  array<int, string>  $arguments
      * @return array{process: Process, codex_session_id: string|null}
      */
-    private function runHeadless(array $arguments, string $jsonFilePath): array
+    private function runHeadless(array $arguments, string $jsonFilePath, ?string $initialUserInput): array
     {
         $process = $this->buildProcess($arguments, false);
         $process->setTimeout(null);
@@ -105,9 +105,11 @@ class CodexCliSessionService
 
         $jsonBuffer = '';
         $codexSessionId = null;
-        /** @var array{pending_items: array<string, string>} $jsonState */
+        /** @var array{pending_items: array<string, string>, initial_user_input: string|null, thread_input_applied: bool} $jsonState */
         $jsonState = [
             'pending_items' => [],
+            'initial_user_input' => $initialUserInput !== null ? trim($initialUserInput) : null,
+            'thread_input_applied' => false,
         ];
 
         try {
@@ -184,7 +186,7 @@ class CodexCliSessionService
 
     /**
      * @param  resource  $jsonHandle
-     * @param  array{pending_items: array<string, string>}  $state
+     * @param  array{pending_items: array<string, string>, initial_user_input: string|null, thread_input_applied: bool}  $state
      */
     private function processJsonBuffer(string &$buffer, $jsonHandle, ?string &$codexSessionId, array &$state): void
     {
@@ -197,7 +199,7 @@ class CodexCliSessionService
 
     /**
      * @param  resource  $jsonHandle
-     * @param  array{pending_items: array<string, string>}  $state
+     * @param  array{pending_items: array<string, string>, initial_user_input: string|null, thread_input_applied: bool}  $state
      */
     private function processJsonLine(string $line, $jsonHandle, ?string &$codexSessionId, array &$state): void
     {
@@ -207,15 +209,28 @@ class CodexCliSessionService
             return;
         }
 
-        fwrite($jsonHandle, $rawLine."\n");
-
         $decoded = json_decode($trimmed, true);
 
         if (! is_array($decoded)) {
+            fwrite($jsonHandle, $rawLine."\n");
             $this->streamToTerminal(Process::OUT, $trimmed."\n");
 
             return;
         }
+
+        $this->maybeCaptureUserInputFromEvent($decoded, $state);
+        $updatedEvent = $this->maybeAugmentThreadStartedEvent($decoded, $state);
+
+        $encodedLine = $rawLine;
+        if ($updatedEvent !== $decoded) {
+            $reEncoded = $this->encodeEventLine($updatedEvent);
+            if ($reEncoded !== null) {
+                $encodedLine = $reEncoded;
+                $decoded = $updatedEvent;
+            }
+        }
+
+        fwrite($jsonHandle, $encodedLine."\n");
 
         $rendered = $this->renderCodexEvent($decoded, $codexSessionId, $state);
 
@@ -226,7 +241,123 @@ class CodexCliSessionService
 
     /**
      * @param  array<string, mixed>  $event
-     * @param  array{pending_items: array<string, string>}  $state
+     * @param  array{pending_items: array<string, string>, initial_user_input: string|null, thread_input_applied: bool}  $state
+     */
+    private function maybeCaptureUserInputFromEvent(array $event, array &$state): void
+    {
+        if (isset($state['initial_user_input']) && trim((string) $state['initial_user_input']) !== '') {
+            return;
+        }
+
+        if (($event['type'] ?? '') === 'thread.started') {
+            $threadInput = trim((string) ($event['initial_user_input'] ?? ''));
+            if ($threadInput !== '') {
+                $state['initial_user_input'] = $threadInput;
+            }
+
+            return;
+        }
+
+        $item = $event['item'] ?? null;
+        if (! is_array($item)) {
+            return;
+        }
+
+        $role = isset($item['role']) ? (string) $item['role'] : '';
+        $type = isset($item['type']) ? (string) $item['type'] : '';
+
+        $looksLikeUser = $role === 'user' || ($type !== '' && str_contains($type, 'user'));
+        if (! $looksLikeUser) {
+            return;
+        }
+
+        $text = $this->extractItemText($item);
+        if ($text !== null && $text !== '') {
+            $state['initial_user_input'] = $text;
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     * @param  array{pending_items: array<string, string>, initial_user_input: string|null, thread_input_applied: bool}  $state
+     * @return array<string, mixed>
+     */
+    private function maybeAugmentThreadStartedEvent(array $event, array &$state): array
+    {
+        if (($event['type'] ?? '') !== 'thread.started') {
+            return $event;
+        }
+
+        $existing = trim((string) ($event['initial_user_input'] ?? ''));
+        if ($existing !== '') {
+            $state['thread_input_applied'] = true;
+
+            return $event;
+        }
+
+        $candidate = trim((string) ($state['initial_user_input'] ?? ''));
+        if ($candidate === '') {
+            return $event;
+        }
+
+        $event['initial_user_input'] = $candidate;
+        $state['thread_input_applied'] = true;
+
+        return $event;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function extractItemText(array $item): ?string
+    {
+        $text = isset($item['text']) ? trim((string) $item['text']) : '';
+        if ($text !== '') {
+            return $text;
+        }
+
+        $content = $item['content'] ?? null;
+        if (! is_array($content)) {
+            return null;
+        }
+
+        $parts = [];
+        foreach ($content as $contentPart) {
+            if (! is_array($contentPart)) {
+                continue;
+            }
+
+            $payload = trim((string) ($contentPart['text'] ?? ''));
+            if ($payload === '') {
+                continue;
+            }
+
+            $contentType = (string) ($contentPart['type'] ?? '');
+            if ($contentType === '' || $contentType === 'text' || $contentType === 'input_text') {
+                $parts[] = $payload;
+            }
+        }
+
+        if ($parts === []) {
+            return null;
+        }
+
+        return implode("\n", $parts);
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function encodeEventLine(array $event): ?string
+    {
+        $encoded = json_encode($event, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+
+        return is_string($encoded) ? $encoded : null;
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     * @param  array{pending_items: array<string, string>, initial_user_input: string|null, thread_input_applied: bool}  $state
      */
     private function renderCodexEvent(array $event, ?string &$codexSessionId, array &$state): ?string
     {
@@ -267,7 +398,7 @@ class CodexCliSessionService
 
     /**
      * @param  array<string, mixed>  $item
-     * @param  array{pending_items: array<string, string>}  $state
+     * @param  array{pending_items: array<string, string>, initial_user_input: string|null, thread_input_applied: bool}  $state
      */
     private function renderItemEvent(string $phase, array $item, array &$state): ?string
     {
@@ -320,7 +451,7 @@ class CodexCliSessionService
 
     /**
      * @param  array<string, mixed>  $item
-     * @param  array{pending_items: array<string, string>}  $state
+     * @param  array{pending_items: array<string, string>, initial_user_input: string|null, thread_input_applied: bool}  $state
      */
     private function renderCommandExecutionItem(string $phase, array $item, array &$state): ?string
     {

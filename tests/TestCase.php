@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Atlas\Agent\Tests;
 
 use Atlas\Agent\Providers\AgentCliServiceProvider;
+use Atlas\Agent\Tests\Support\HasMockeryExpectations;
 use Mockery;
-use Mockery\Expectation;
 use Mockery\MockInterface;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
 
@@ -53,13 +53,14 @@ abstract class TestCase extends OrchestraTestCase
     }
 
     /**
-     * @template T of MockInterface
+     * @template TMock of MockInterface
      *
-     * @param  T  $mock
+     * @param  TMock  $mock
+     * @return \Mockery\ExpectationInterface&HasMockeryExpectations
      */
-    protected function mockExpectation(MockInterface $mock, string $method): Expectation
+    protected function mockExpectation(MockInterface $mock, string $method)
     {
-        /** @var Expectation $expectation */
+        /** @var \Mockery\ExpectationInterface&HasMockeryExpectations $expectation */
         $expectation = $mock->shouldReceive($method);
 
         return $expectation;

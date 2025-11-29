@@ -59,7 +59,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $service->headlessProcess = $process;
 
-        $result = $service->startSession(['tasks:list'], false);
+        $result = $service->startSession(['tasks:list'], false, 'tasks:list');
         $output = $service->streamedOutput[Process::OUT] ?? '';
 
         $this->assertSame('thread-123', $result['session_id']);
@@ -73,9 +73,55 @@ final class CodexCliSessionServiceTest extends TestCase
         $logContents = file_get_contents($expectedPath);
         $this->assertIsString($logContents);
         $this->assertStringContainsString('thread.started', $logContents);
+        $lines = array_filter(explode("\n", $logContents));
+        $firstEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($firstEvent);
+        $this->assertSame('tasks:list', $firstEvent['initial_user_input'] ?? null);
 
         $this->assertStringContainsString('thread started', $output);
         $this->assertStringContainsString('tokens used', $output);
+    }
+
+    public function test_thread_started_event_uses_codex_provided_initial_input_when_available(): void
+    {
+        $this->cleanCodexDirectory();
+
+        $service = new TestCodexCliSessionService;
+        /** @var Process&\Mockery\MockInterface $process */
+        $process = Mockery::mock(Process::class);
+
+        $events = [
+            ['type' => 'thread.started', 'thread_id' => 'thread-123', 'initial_user_input' => 'From Codex'],
+            ['type' => 'turn.completed', 'usage' => ['input_tokens' => 1, 'output_tokens' => 2]],
+        ];
+
+        $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'run')
+            ->once()
+            ->andReturnUsing(function (callable $callback) use ($events): int {
+                foreach ($events as $event) {
+                    $callback(Process::OUT, json_encode($event)."\n");
+                }
+
+                return 0;
+            });
+        $this->mockExpectation($process, 'isSuccessful')->once()->andReturn(true);
+        $this->mockExpectation($process, 'getExitCode')->once()->andReturn(0);
+
+        $service->headlessProcess = $process;
+
+        $result = $service->startSession(['tasks:list'], false, 'local override');
+        $this->assertSame('thread-123', $result['session_id']);
+
+        $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
+        $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-123.jsonl';
+        $this->assertFileExists($expectedPath);
+
+        $lines = array_filter(explode("\n", (string) file_get_contents($expectedPath)));
+        $firstEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($firstEvent);
+        $this->assertSame('From Codex', $firstEvent['initial_user_input'] ?? null);
     }
 
     public function test_headless_session_throws_when_process_fails(): void
