@@ -19,9 +19,12 @@ class CodexCliSessionService
 {
     private string $sessionDirectory;
 
-    public function __construct(?string $sessionDirectory = null)
+    private ?string $workspaceDirectory;
+
+    public function __construct(?string $sessionDirectory = null, ?string $workspaceDirectory = null)
     {
-        $this->sessionDirectory = $sessionDirectory ?? storage_path('app/codex_sessions');
+        $this->sessionDirectory = $sessionDirectory ?? $this->defaultSessionDirectory();
+        $this->workspaceDirectory = $this->normalizeDirectoryPath($workspaceDirectory);
     }
 
     /**
@@ -35,14 +38,16 @@ class CodexCliSessionService
         ?string $initialUserInput = null,
         ?string $systemInstructions = null,
         ?array $threadRequestMeta = null,
-        ?string $resumeThreadId = null
+        ?string $resumeThreadId = null,
+        ?string $workspaceOverride = null
     ): array {
         $sessionId = $resumeThreadId !== null && $resumeThreadId !== ''
             ? $resumeThreadId
             : (string) Str::uuid();
+        $workspacePath = $this->normalizeDirectoryPath($workspaceOverride) ?? $this->workspaceDirectory;
 
         if ($interactive) {
-            $process = $this->runInteractive($arguments, $resumeThreadId);
+            $process = $this->runInteractive($arguments, $resumeThreadId, $workspacePath);
 
             return [
                 'session_id' => $sessionId,
@@ -58,7 +63,8 @@ class CodexCliSessionService
             $initialUserInput,
             $systemInstructions,
             $threadRequestMeta,
-            $resumeThreadId
+            $resumeThreadId,
+            $workspacePath
         );
         $process = $headlessResult['process'];
         $codexSessionId = $headlessResult['codex_session_id'] ?? $sessionId;
@@ -82,9 +88,10 @@ class CodexCliSessionService
     /**
      * @param  array<int, string>  $arguments
      */
-    private function runInteractive(array $arguments, ?string $resumeThreadId): Process
+    private function runInteractive(array $arguments, ?string $resumeThreadId, ?string $workspacePath): Process
     {
         $process = $this->buildProcess($arguments, true, $resumeThreadId);
+        $this->prepareProcess($process, $workspacePath);
         $process->setTimeout(null);
         $process->setIdleTimeout(null);
 
@@ -114,9 +121,11 @@ class CodexCliSessionService
         ?string $initialUserInput,
         ?string $systemInstructions,
         ?array $threadRequestMeta,
-        ?string $resumeThreadId
+        ?string $resumeThreadId,
+        ?string $workspacePath
     ): array {
         $process = $this->buildProcess($arguments, false, $resumeThreadId);
+        $this->prepareProcess($process, $workspacePath);
         $process->setTimeout(null);
         $process->setIdleTimeout(null);
 
@@ -135,7 +144,9 @@ class CodexCliSessionService
          *     system_instructions: string|null,
          *     thread_request_logged: bool,
          *     thread_request_meta: array<string, mixed>,
-         *     resumed_thread_id: string|null
+         *     resumed_thread_id: string|null,
+         *     workspace_event_logged: bool,
+         *     workspace_event: array<string, mixed>|null,
          * } $jsonState
          */
         $jsonState = [
@@ -145,8 +156,11 @@ class CodexCliSessionService
             'thread_request_logged' => false,
             'thread_request_meta' => is_array($threadRequestMeta) ? $threadRequestMeta : [],
             'resumed_thread_id' => $resumeThreadId !== null && trim($resumeThreadId) !== '' ? trim($resumeThreadId) : null,
+            'workspace_event_logged' => false,
+            'workspace_event' => $this->buildWorkspaceEvent($arguments, $workspacePath),
         ];
 
+        $this->maybeLogWorkspaceEvent($jsonHandle, $codexSessionId, $jsonState);
         $this->maybeLogThreadLifecycleEvent($jsonHandle, $codexSessionId, $jsonState);
 
         try {
@@ -211,6 +225,24 @@ class CodexCliSessionService
         return new Process($command);
     }
 
+    private function prepareProcess(Process $process, ?string $workspacePath): void
+    {
+        $this->applyWorkspaceToProcess($process, $workspacePath);
+    }
+
+    private function applyWorkspaceToProcess(Process $process, ?string $workspacePath): void
+    {
+        if ($workspacePath === null) {
+            return;
+        }
+
+        if (! is_dir($workspacePath)) {
+            throw new RuntimeException('Codex workspace directory does not exist: '.$workspacePath);
+        }
+
+        $process->setWorkingDirectory($workspacePath);
+    }
+
     /**
      * @param  array<int, string>  $arguments
      * @return array{0: array<int, string>, 1: array<int, string>}
@@ -237,6 +269,24 @@ class CodexCliSessionService
         return [$flags, $positionals];
     }
 
+    private function normalizeDirectoryPath(?string $path): ?string
+    {
+        if ($path === null) {
+            return null;
+        }
+
+        $trimmed = trim($path);
+
+        return $trimmed !== '' ? $trimmed : null;
+    }
+
+    private function defaultSessionDirectory(): string
+    {
+        $base = storage_path('app/sessions');
+
+        return rtrim($base, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.'codex';
+    }
+
     private function prepareJsonLogFile(string $sessionId): string
     {
         $directory = $this->sessionDirectory;
@@ -246,6 +296,90 @@ class CodexCliSessionService
         }
 
         return $directory.DIRECTORY_SEPARATOR.$sessionId.'.jsonl';
+    }
+
+    /**
+     * @param  array<int, string>  $arguments
+     * @return array<string, mixed>|null
+     */
+    private function buildWorkspaceEvent(array $arguments, ?string $workspacePath): ?array
+    {
+        if ($workspacePath === null) {
+            return null;
+        }
+
+        $resolvedWorkspace = realpath($workspacePath) ?: $workspacePath;
+        $platformPath = $this->resolvePlatformBasePath();
+        $model = $this->determineModelFromArguments($arguments);
+
+        $event = [
+            'type' => 'workspace.context',
+            'workspace_path' => $resolvedWorkspace,
+            'session_log_path' => $this->sessionDirectory,
+        ];
+
+        if ($platformPath !== null) {
+            $event['platform_path'] = $platformPath;
+        }
+
+        if ($model !== null) {
+            $event['model'] = $model;
+        }
+
+        return $event;
+    }
+
+    private function resolvePlatformBasePath(): ?string
+    {
+        if (function_exists('base_path')) {
+            try {
+                return base_path();
+            } catch (\Throwable $exception) {
+                // Fallback to working directory below.
+            }
+        }
+
+        $cwd = getcwd();
+
+        return $cwd !== false ? $cwd : null;
+    }
+
+    /**
+     * @param  array<int, string>  $arguments
+     */
+    private function determineModelFromArguments(array $arguments): ?string
+    {
+        $argumentCount = count($arguments);
+
+        for ($index = 0; $index < $argumentCount; $index++) {
+            $argument = $arguments[$index];
+
+            if ($argument === '') {
+                continue;
+            }
+
+            if (str_starts_with($argument, '--model=')) {
+                $value = substr($argument, 8);
+
+                return $value !== '' ? $value : null;
+            }
+
+            if ($argument !== '--model') {
+                continue;
+            }
+
+            $next = $arguments[$index + 1] ?? null;
+
+            if (is_string($next)) {
+                $value = trim($next);
+
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        return null;
     }
 
     private function stripEscapeSequences(string $text): string
@@ -273,7 +407,9 @@ class CodexCliSessionService
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
-     *     resumed_thread_id: string|null
+     *     resumed_thread_id: string|null,
+     *     workspace_event_logged: bool,
+     *     workspace_event: array<string, mixed>|null
      * }  $state
      */
     private function processJsonBuffer(string &$buffer, $jsonHandle, ?string &$codexSessionId, array &$state): void
@@ -293,7 +429,9 @@ class CodexCliSessionService
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
-     *     resumed_thread_id: string|null
+     *     resumed_thread_id: string|null,
+     *     workspace_event_logged: bool,
+     *     workspace_event: array<string, mixed>|null
      * }  $state
      */
     private function processJsonLine(string $line, $jsonHandle, ?string &$codexSessionId, array &$state): void
@@ -332,7 +470,43 @@ class CodexCliSessionService
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
-     *     resumed_thread_id: string|null
+     *     resumed_thread_id: string|null,
+     *     workspace_event_logged: bool,
+     *     workspace_event: array<string, mixed>|null,
+     * }  $state
+     */
+    private function maybeLogWorkspaceEvent($jsonHandle, ?string &$codexSessionId, array &$state): void
+    {
+        if ($state['workspace_event_logged'] === true) {
+            return;
+        }
+
+        $event = $state['workspace_event'];
+
+        if (! is_array($event) || $event === []) {
+            return;
+        }
+
+        $encoded = $this->encodeEventLine($event);
+        if ($encoded === null) {
+            return;
+        }
+
+        $this->processJsonLine($encoded, $jsonHandle, $codexSessionId, $state);
+        $state['workspace_event_logged'] = true;
+    }
+
+    /**
+     * @param  resource  $jsonHandle
+     * @param  array{
+     *     pending_items: array<string, string>,
+     *     initial_user_input: string|null,
+     *     system_instructions: string|null,
+     *     thread_request_logged: bool,
+     *     thread_request_meta: array<string, mixed>,
+     *     resumed_thread_id: string|null,
+     *     workspace_event_logged: bool,
+     *     workspace_event: array<string, mixed>|null,
      * }  $state
      */
     private function maybeLogThreadLifecycleEvent($jsonHandle, ?string &$codexSessionId, array &$state): void
@@ -402,7 +576,9 @@ class CodexCliSessionService
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
-     *     resumed_thread_id: string|null
+     *     resumed_thread_id: string|null,
+     *     workspace_event_logged: bool,
+     *     workspace_event: array<string, mixed>|null
      * }  $state
      */
     private function maybeCaptureUserInputFromEvent(array $event, array &$state): void
@@ -523,7 +699,9 @@ class CodexCliSessionService
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
-     *     resumed_thread_id: string|null
+     *     resumed_thread_id: string|null,
+     *     workspace_event_logged: bool,
+     *     workspace_event: array<string, mixed>|null
      * }  $state
      */
     private function renderCodexEvent(array $event, ?string &$codexSessionId, array &$state): ?string
@@ -559,6 +737,15 @@ class CodexCliSessionService
                     $codexSessionId !== null ? 'session id: '.$codexSessionId : null,
                 ]);
 
+            case 'workspace.context':
+                return $this->formatLines([
+                    'workspace',
+                    isset($event['workspace_path']) ? 'codex: '.$event['workspace_path'] : null,
+                    isset($event['platform_path']) ? 'platform: '.$event['platform_path'] : null,
+                    isset($event['session_log_path']) ? 'logs: '.$event['session_log_path'] : null,
+                    isset($event['model']) ? 'model: '.$event['model'] : null,
+                ]);
+
             case 'turn.started':
                 return null;
 
@@ -589,7 +776,9 @@ class CodexCliSessionService
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
-     *     resumed_thread_id: string|null
+     *     resumed_thread_id: string|null,
+     *     workspace_event_logged: bool,
+     *     workspace_event: array<string, mixed>|null
      * }  $state
      */
     private function renderItemEvent(string $phase, array $item, array &$state): ?string
@@ -649,7 +838,9 @@ class CodexCliSessionService
      *     system_instructions: string|null,
      *     thread_request_logged: bool,
      *     thread_request_meta: array<string, mixed>,
-     *     resumed_thread_id: string|null
+     *     resumed_thread_id: string|null,
+     *     workspace_event_logged: bool,
+     *     workspace_event: array<string, mixed>|null
      * }  $state
      */
     private function renderCommandExecutionItem(string $phase, array $item, array &$state): ?string

@@ -22,7 +22,8 @@ final class CodexCliSessionServiceTest extends TestCase
     {
         $this->cleanCodexDirectory();
 
-        $service = new TestCodexCliSessionService;
+        $workspacePath = $this->workspacePath();
+        $service = new TestCodexCliSessionService(null, $workspacePath);
         /** @var Process&\Mockery\MockInterface $process */
         $process = Mockery::mock(Process::class);
 
@@ -40,6 +41,10 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->mockExpectation($process, 'setIdleTimeout')
             ->once()
             ->with(null)
+            ->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')
+            ->once()
+            ->with($workspacePath)
             ->andReturnSelf();
         $this->mockExpectation($process, 'run')
             ->once()
@@ -65,7 +70,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertSame('thread-123', $result['session_id']);
         $this->assertSame(0, $result['exit_code']);
 
-        $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
+        $expectedDirectory = $this->codexSessionsDirectory();
         $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-123.jsonl';
         $this->assertSame($expectedPath, $result['json_file_path']);
         $this->assertFileExists($expectedPath);
@@ -74,7 +79,13 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertIsString($logContents);
         $this->assertStringContainsString('thread.started', $logContents);
         $lines = array_values(array_filter(explode("\n", $logContents)));
-        $firstEvent = json_decode($lines[0] ?? '', true);
+        $workspaceEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($workspaceEvent);
+        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+        $this->assertSame(realpath($workspacePath) ?: $workspacePath, $workspaceEvent['workspace_path'] ?? null);
+        $this->assertSame($expectedDirectory, $workspaceEvent['session_log_path'] ?? null);
+
+        $firstEvent = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($firstEvent);
         $this->assertSame('thread.request', $firstEvent['type'] ?? null);
         $this->assertSame('tasks:list', $firstEvent['task'] ?? null);
@@ -84,13 +95,109 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertStringContainsString('thread request', $output);
         $this->assertStringContainsString('thread started', $output);
         $this->assertStringContainsString('tokens used', $output);
+        $this->assertStringContainsString('workspace', $output);
+    }
+
+    public function test_workspace_event_logs_workspace_and_model_details(): void
+    {
+        $this->cleanCodexDirectory();
+
+        $workspacePath = $this->workspacePath();
+        $service = new TestCodexCliSessionService(null, $workspacePath);
+        /** @var Process&\Mockery\MockInterface $process */
+        $process = Mockery::mock(Process::class);
+
+        $events = [
+            ['type' => 'thread.started', 'thread_id' => 'thread-modelled'],
+            ['type' => 'turn.completed', 'usage' => ['input_tokens' => 10, 'output_tokens' => 5]],
+        ];
+
+        $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')->once()->with($workspacePath)->andReturnSelf();
+        $this->mockExpectation($process, 'run')
+            ->once()
+            ->andReturnUsing(function (callable $callback) use ($events): int {
+                foreach ($events as $event) {
+                    $callback(Process::OUT, json_encode($event)."\n");
+                }
+
+                return 0;
+            });
+        $this->mockExpectation($process, 'isSuccessful')->once()->andReturn(true);
+        $this->mockExpectation($process, 'getExitCode')->once()->andReturn(0);
+
+        $service->headlessProcess = $process;
+
+        $service->startSession(['--model=o1-mini', 'tasks:list'], false, 'tasks:list', null, null, null);
+
+        $expectedDirectory = $this->codexSessionsDirectory();
+        $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-modelled.jsonl';
+        $this->assertFileExists($expectedPath);
+
+        $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
+        $workspaceEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($workspaceEvent);
+        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+        $this->assertSame('o1-mini', $workspaceEvent['model'] ?? null);
+        $this->assertSame(realpath($workspacePath) ?: $workspacePath, $workspaceEvent['workspace_path'] ?? null);
+    }
+
+    public function test_workspace_override_changes_process_directory_and_log_entry(): void
+    {
+        $this->cleanCodexDirectory();
+
+        $baseWorkspacePath = $this->workspacePath();
+        $overridePath = $baseWorkspacePath.'/override';
+        if (! is_dir($overridePath)) {
+            mkdir($overridePath, 0777, true);
+        }
+
+        $service = new TestCodexCliSessionService(null, $baseWorkspacePath);
+        /** @var Process&\Mockery\MockInterface $process */
+        $process = Mockery::mock(Process::class);
+
+        $events = [
+            ['type' => 'thread.started', 'thread_id' => 'thread-override'],
+            ['type' => 'turn.completed', 'usage' => ['input_tokens' => 10, 'output_tokens' => 4]],
+        ];
+
+        $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')->once()->with($overridePath)->andReturnSelf();
+        $this->mockExpectation($process, 'run')
+            ->once()
+            ->andReturnUsing(function (callable $callback) use ($events): int {
+                foreach ($events as $event) {
+                    $callback(Process::OUT, json_encode($event)."\n");
+                }
+
+                return 0;
+            });
+        $this->mockExpectation($process, 'isSuccessful')->once()->andReturn(true);
+        $this->mockExpectation($process, 'getExitCode')->once()->andReturn(0);
+
+        $service->headlessProcess = $process;
+
+        $service->startSession(['tasks:list'], false, 'tasks:list', null, null, null, $overridePath);
+
+        $expectedDirectory = $this->codexSessionsDirectory();
+        $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-override.jsonl';
+        $this->assertFileExists($expectedPath);
+
+        $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
+        $workspaceEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($workspaceEvent);
+        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+        $this->assertSame(realpath($overridePath) ?: $overridePath, $workspaceEvent['workspace_path'] ?? null);
     }
 
     public function test_thread_started_event_uses_codex_provided_initial_input_when_available(): void
     {
         $this->cleanCodexDirectory();
 
-        $service = new TestCodexCliSessionService;
+        $workspacePath = $this->workspacePath();
+        $service = new TestCodexCliSessionService(null, $workspacePath);
         /** @var Process&\Mockery\MockInterface $process */
         $process = Mockery::mock(Process::class);
 
@@ -101,6 +208,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
         $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')->once()->with($workspacePath)->andReturnSelf();
         $this->mockExpectation($process, 'run')
             ->once()
             ->andReturnUsing(function (callable $callback) use ($events): int {
@@ -118,18 +226,22 @@ final class CodexCliSessionServiceTest extends TestCase
         $result = $service->startSession(['tasks:list'], false, 'local override', 'Follow these', null, null);
         $this->assertSame('thread-123', $result['session_id']);
 
-        $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
+        $expectedDirectory = $this->codexSessionsDirectory();
         $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-123.jsonl';
         $this->assertFileExists($expectedPath);
 
         $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
-        $threadRequest = json_decode($lines[0] ?? '', true);
+        $workspaceEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($workspaceEvent);
+        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+
+        $threadRequest = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($threadRequest);
         $this->assertSame('thread.request', $threadRequest['type'] ?? null);
         $this->assertSame('Follow these', $threadRequest['instructions'] ?? null);
         $this->assertSame('local override', $threadRequest['task'] ?? null);
 
-        $threadStarted = json_decode($lines[1] ?? '', true);
+        $threadStarted = json_decode($lines[2] ?? '', true);
         $this->assertIsArray($threadStarted);
         $this->assertSame('From Codex', $threadStarted['initial_user_input'] ?? null);
     }
@@ -138,7 +250,8 @@ final class CodexCliSessionServiceTest extends TestCase
     {
         $this->cleanCodexDirectory();
 
-        $service = new TestCodexCliSessionService;
+        $workspacePath = $this->workspacePath();
+        $service = new TestCodexCliSessionService(null, $workspacePath);
         /** @var Process&\Mockery\MockInterface $process */
         $process = Mockery::mock(Process::class);
 
@@ -149,6 +262,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
         $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')->once()->with($workspacePath)->andReturnSelf();
         $this->mockExpectation($process, 'run')
             ->once()
             ->andReturnUsing(function (callable $callback) use ($events): int {
@@ -165,12 +279,16 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $service->startSession(['tasks:list'], false, 'tasks:list --plan', 'Always lint', null, null);
 
-        $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
+        $expectedDirectory = $this->codexSessionsDirectory();
         $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-123.jsonl';
         $this->assertFileExists($expectedPath);
 
         $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
-        $threadRequest = json_decode($lines[0] ?? '', true);
+        $workspaceEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($workspaceEvent);
+        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+
+        $threadRequest = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($threadRequest);
         $this->assertSame('thread.request', $threadRequest['type'] ?? null);
         $this->assertSame('Always lint', $threadRequest['instructions'] ?? null);
@@ -181,7 +299,8 @@ final class CodexCliSessionServiceTest extends TestCase
     {
         $this->cleanCodexDirectory();
 
-        $service = new TestCodexCliSessionService;
+        $workspacePath = $this->workspacePath();
+        $service = new TestCodexCliSessionService(null, $workspacePath);
         /** @var Process&\Mockery\MockInterface $process */
         $process = Mockery::mock(Process::class);
 
@@ -192,6 +311,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
         $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')->once()->with($workspacePath)->andReturnSelf();
         $this->mockExpectation($process, 'run')
             ->once()
             ->andReturnUsing(function (callable $callback) use ($events): int {
@@ -209,25 +329,30 @@ final class CodexCliSessionServiceTest extends TestCase
         $meta = ['assistant_id' => 'assistant-1', 'user_id' => 42];
         $service->startSession(['tasks:list'], false, 'run diagnostics', null, $meta, null);
 
-        $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
+        $expectedDirectory = $this->codexSessionsDirectory();
         $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-456.jsonl';
         $this->assertFileExists($expectedPath);
 
         $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
-        $threadRequest = json_decode($lines[0] ?? '', true);
+        $workspaceEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($workspaceEvent);
+        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+
+        $threadRequest = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($threadRequest);
         $this->assertSame('thread.request', $threadRequest['type'] ?? null);
         $this->assertSame('assistant-1', $threadRequest['assistant_id'] ?? null);
         $this->assertSame(42, $threadRequest['user_id'] ?? null);
         $this->assertSame('run diagnostics', $threadRequest['task'] ?? null);
-        $this->assertArrayNotHasKey('assistant_id', json_decode($lines[1] ?? '{}', true) ?: []);
+        $this->assertArrayNotHasKey('assistant_id', json_decode($lines[2] ?? '{}', true) ?: []);
     }
 
     public function test_thread_resumed_event_is_logged_when_resuming_existing_session(): void
     {
         $this->cleanCodexDirectory();
 
-        $service = new TestCodexCliSessionService;
+        $workspacePath = $this->workspacePath();
+        $service = new TestCodexCliSessionService(null, $workspacePath);
         /** @var Process&\Mockery\MockInterface $process */
         $process = Mockery::mock(Process::class);
 
@@ -238,6 +363,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
         $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')->once()->with($workspacePath)->andReturnSelf();
         $this->mockExpectation($process, 'run')
             ->once()
             ->andReturnUsing(function (callable $callback) use ($events): int {
@@ -261,12 +387,16 @@ final class CodexCliSessionServiceTest extends TestCase
             'thread-789'
         );
 
-        $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
+        $expectedDirectory = $this->codexSessionsDirectory();
         $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-789.jsonl';
         $this->assertFileExists($expectedPath);
 
         $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
-        $firstEvent = json_decode($lines[0] ?? '', true);
+        $workspaceEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($workspaceEvent);
+        $this->assertSame('workspace.context', $workspaceEvent['type'] ?? null);
+
+        $firstEvent = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($firstEvent);
         $this->assertSame('thread.resumed', $firstEvent['type'] ?? null);
         $this->assertSame('continue troubleshooting', $firstEvent['task'] ?? null);
@@ -277,7 +407,8 @@ final class CodexCliSessionServiceTest extends TestCase
     {
         $this->cleanCodexDirectory();
 
-        $service = new TestCodexCliSessionService;
+        $workspacePath = $this->workspacePath();
+        $service = new TestCodexCliSessionService(null, $workspacePath);
         /** @var Process&\Mockery\MockInterface $process */
         $process = Mockery::mock(Process::class);
 
@@ -288,6 +419,10 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->mockExpectation($process, 'setIdleTimeout')
             ->once()
             ->with(null)
+            ->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')
+            ->once()
+            ->with($workspacePath)
             ->andReturnSelf();
         $this->mockExpectation($process, 'run')
             ->once()
@@ -317,7 +452,8 @@ final class CodexCliSessionServiceTest extends TestCase
 
     public function test_interactive_session_returns_exit_code_without_json_log(): void
     {
-        $service = new TestCodexCliSessionService;
+        $workspacePath = $this->workspacePath();
+        $service = new TestCodexCliSessionService(null, $workspacePath);
         /** @var Process&\Mockery\MockInterface $process */
         $process = Mockery::mock(Process::class);
 
@@ -328,6 +464,10 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->mockExpectation($process, 'setIdleTimeout')
             ->once()
             ->with(null)
+            ->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')
+            ->once()
+            ->with($workspacePath)
             ->andReturnSelf();
         $this->mockExpectation($process, 'setTty')
             ->once()
@@ -354,7 +494,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
     private function cleanCodexDirectory(): void
     {
-        $directory = (string) config('atlas-agent-cli.sessions.path');
+        $directory = $this->codexSessionsDirectory();
 
         if (! is_dir($directory)) {
             return;

@@ -27,7 +27,14 @@ abstract class TestCase extends OrchestraTestCase
         }
 
         $this->app->useStoragePath($storagePath);
-        config()->set('atlas-agent-cli.sessions.path', storage_path('app/codex_sessions'));
+        config()->set('atlas-agent-cli.sessions.path', storage_path('app/sessions'));
+
+        $workspacePath = $this->workspacePath();
+        if (! is_dir($workspacePath)) {
+            mkdir($workspacePath, 0777, true);
+        }
+
+        config()->set('atlas-agent-cli.workspace.path', $workspacePath);
     }
 
     protected function tearDown(): void
@@ -50,6 +57,18 @@ abstract class TestCase extends OrchestraTestCase
     private function storagePath(): string
     {
         return __DIR__.'/storage';
+    }
+
+    protected function workspacePath(): string
+    {
+        return __DIR__.'/workspace';
+    }
+
+    protected function codexSessionsDirectory(): string
+    {
+        $base = (string) config('atlas-agent-cli.sessions.path');
+
+        return rtrim($base, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR.'codex';
     }
 
     /**

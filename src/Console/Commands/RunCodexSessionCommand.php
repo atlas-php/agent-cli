@@ -24,6 +24,7 @@ class RunCodexSessionCommand extends Command
         {--instructions= : Additional system instructions appended ahead of the user task}
         {--meta= : JSON object of metadata stored on the synthetic thread lifecycle log entry}
         {--resume= : Resume an existing Codex thread by identifier}
+        {--workspace= : Absolute path Codex should treat as its working directory for this run}
     ';
 
     /**
@@ -62,6 +63,7 @@ class RunCodexSessionCommand extends Command
             return self::FAILURE;
         }
 
+        $workspaceOverride = $this->resolveWorkspaceOption();
         $initialUserInput = $this->buildInitialUserInput($arguments);
         $systemInstructions = $this->resolveInstructionsOption();
 
@@ -83,7 +85,8 @@ class RunCodexSessionCommand extends Command
                 $initialUserInput,
                 $systemInstructions,
                 $threadRequestMeta,
-                $resumeThreadId
+                $resumeThreadId,
+                $workspaceOverride
             );
         } catch (\Throwable $exception) {
             $this->error('Codex session failed: '.$exception->getMessage());
@@ -191,6 +194,16 @@ class RunCodexSessionCommand extends Command
     private function resolveResumeOption(): ?string
     {
         $option = $this->option('resume');
+        if (is_string($option)) {
+            $option = trim($option);
+        }
+
+        return is_string($option) && $option !== '' ? $option : null;
+    }
+
+    private function resolveWorkspaceOption(): ?string
+    {
+        $option = $this->option('workspace');
         if (is_string($option)) {
             $option = trim($option);
         }

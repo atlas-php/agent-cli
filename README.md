@@ -51,6 +51,7 @@ Options:
 * `--instructions=` – prepend additional system instructions ahead of the user task; stored in the JSON log as a `thread.request` event.
 * `--meta=` – supply a JSON object of metadata (IDs, tags, etc.) that is recorded alongside the synthetic thread lifecycle log entry.
 * `--resume=` – continue an existing Codex thread; the wrapper preserves the thread identifier, writes a `thread.resumed` log entry for the new task, and still forwards only your task arguments to Codex.
+* `--workspace=` – override the working directory Codex uses for this run (falls back to the configured workspace when omitted). The command executes Codex from this path and logs it inside the `workspace.context` JSONL entry.
 
 Upon completion the command prints:
 
@@ -79,7 +80,9 @@ $result = app(CodexCliSessionService::class)->startSession([
 
 The service handles both interactive and headless runs, automatically sanitizes ANSI escape sequences, streams events to STDOUT/STDERR, and records every Codex JSON event to a JSON Lines log.
 
-Each headless log now begins with a synthetic `thread.request` entry summarizing the provided system instructions (if any), the user task that triggered the run, and any arbitrary metadata passed through `--meta`, so downstream tooling can reconstruct the full prompt context. When resuming a thread via `--resume`, the log instead records a `thread.resumed` entry containing the latest user task (plus metadata) without re-stating the original instructions.
+When invoking the service directly you may pass a workspace override as the final argument (`startSession($args, $interactive, ..., $workspaceOverride)`), mirroring the `--workspace` console option.
+
+Each headless log now begins with a `workspace.context` entry that captures the Codex workspace path, the platform path, the JSONL log directory, and the effective model for the run. This is followed by the synthetic `thread.request` (or `thread.resumed`) entry summarizing system instructions, the triggering task, and any metadata supplied via `--meta`, so downstream tooling can reconstruct the full prompt context. When resuming a thread via `--resume`, the log still records a `thread.resumed` entry containing the latest user task (plus metadata) without re-stating the original instructions.
 
 ## Configuration
 
@@ -91,7 +94,8 @@ php artisan vendor:publish --tag=atlas-agent-cli-config
 
 The `config/atlas-agent-cli.php` file exposes:
 
-* `sessions.path` – where JSONL transcripts are persisted. Defaults to `storage/app/codex_sessions`.
+* `sessions.path` – base directory for JSONL transcripts. Atlas Agent CLI stores Codex logs inside `<path>/codex`. Defaults to `storage/app/sessions`.
+* `workspace.path` – the working directory Codex should execute within. Defaults to your Laravel application's base path but can be pointed at any detached workspace (override via `ATLAS_AGENT_CLI_WORKSPACE_PATH` or the `--workspace` command option for per-run overrides).
 * `model` – Codex model automatically applied to each run unless overridden with `--model` (defaults to `gpt-5.1-codex-max`). Available models are listed at [OpenAI Codex models](https://developers.openai.com/codex/models).
 
 ## Local Sandbox
@@ -102,7 +106,7 @@ The repository ships with a minimal Laravel sandbox so you can run the `codex:se
 php sandbox/artisan codex:session -- tasks:list --plan
 ```
 
-JSON transcripts are stored inside `sandbox/storage/app/codex_sessions`. Pass `--interactive` to talk directly to Codex without log files.
+JSON transcripts are stored inside `sandbox/storage/app/sessions/codex`. Pass `--interactive` to talk directly to Codex without log files.
 
 ## Testing
 

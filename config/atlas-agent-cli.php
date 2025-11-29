@@ -8,12 +8,27 @@ return [
     | Codex Session Storage Directory
     |--------------------------------------------------------------------------
     |
-    | This directory stores the JSON Lines transcripts that are captured whenever
-    | a Codex CLI session is executed in headless mode.
+    | This directory controls where the provider stores JSON Lines transcripts.
+    | The Agent CLI automatically creates a "codex" sub-directory within the
+    | configured path so multiple providers can share the same base directory.
     |
     */
     'sessions' => [
-        'path' => env('ATLAS_AGENT_CLI_SESSION_PATH', storage_path('app/codex_sessions')),
+        'path' => env('ATLAS_AGENT_CLI_SESSION_PATH', storage_path('app/sessions')),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Codex Workspace Directory
+    |--------------------------------------------------------------------------
+    |
+    | Codex executes inside this directory so agent commands have access to the
+    | appropriate project workspace without impacting the platform runtime. The
+    | path should point to the workspace root that Codex should operate within.
+    |
+    */
+    'workspace' => [
+        'path' => env('ATLAS_AGENT_CLI_WORKSPACE_PATH', base_path()),
     ],
 
     /*

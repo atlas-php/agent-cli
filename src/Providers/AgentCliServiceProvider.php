@@ -25,9 +25,12 @@ class AgentCliServiceProvider extends PackageServiceProvider
         );
 
         $this->app->singleton(CodexCliSessionService::class, function (): CodexCliSessionService {
-            $sessionsPath = (string) config('atlas-agent-cli.sessions.path', storage_path('app/codex_sessions'));
+            $sessionsBasePath = (string) config('atlas-agent-cli.sessions.path', storage_path('app/sessions'));
+            $sessionsPath = $this->providerDirectory($sessionsBasePath, 'codex');
+            $workspacePath = config('atlas-agent-cli.workspace.path');
+            $workspacePath = is_string($workspacePath) ? $workspacePath : null;
 
-            return new CodexCliSessionService($sessionsPath);
+            return new CodexCliSessionService($sessionsPath, $workspacePath);
         });
     }
 
@@ -53,5 +56,13 @@ class AgentCliServiceProvider extends PackageServiceProvider
     protected function packageSlug(): string
     {
         return 'atlas agent cli';
+    }
+
+    private function providerDirectory(string $basePath, string $provider): string
+    {
+        $trimmedBase = rtrim($basePath, DIRECTORY_SEPARATOR);
+        $trimmedProvider = trim($provider, DIRECTORY_SEPARATOR);
+
+        return $trimmedBase.DIRECTORY_SEPARATOR.$trimmedProvider;
     }
 }
