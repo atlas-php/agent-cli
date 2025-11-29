@@ -21,6 +21,7 @@ class RunCodexSessionCommand extends Command
         {args?* : Arguments to pass to the Codex CLI}
         {--interactive : Run Codex attached to your terminal without logging}
         {--model= : Override the Codex model for this run}
+        {--instructions= : Additional system instructions appended ahead of the user task}
     ';
 
     /**
@@ -60,11 +61,17 @@ class RunCodexSessionCommand extends Command
         }
 
         $initialUserInput = $this->buildInitialUserInput($arguments);
+        $systemInstructions = $this->resolveInstructionsOption();
         $arguments = $this->injectRuntimeOptions($arguments);
         $interactive = (bool) $this->option('interactive');
 
         try {
-            $result = $this->sessionService->startSession($arguments, $interactive, $initialUserInput);
+            $result = $this->sessionService->startSession(
+                $arguments,
+                $interactive,
+                $initialUserInput,
+                $systemInstructions
+            );
         } catch (\Throwable $exception) {
             $this->error('Codex session failed: '.$exception->getMessage());
 
@@ -133,6 +140,16 @@ class RunCodexSessionCommand extends Command
         }
 
         return is_string($configured) && $configured !== '' ? $configured : null;
+    }
+
+    private function resolveInstructionsOption(): ?string
+    {
+        $option = $this->option('instructions');
+        if (is_string($option)) {
+            $option = trim($option);
+        }
+
+        return is_string($option) && $option !== '' ? $option : null;
     }
 
     /**
