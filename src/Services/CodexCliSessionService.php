@@ -365,7 +365,8 @@ class CodexCliSessionService
             $instructionsTemplate,
             $renderedTask,
             $renderedInstructions,
-            $combined
+            $combined,
+            false
         );
 
         return $event;
@@ -456,12 +457,12 @@ class CodexCliSessionService
      */
     private function renderTaskFormat(array $templates, ?string $task, ?string $instructions): array
     {
-        $renderedTask = $this->renderTemplatePart($templates['task'] ?? null, $task, $instructions);
-        $renderedInstructions = $this->renderTemplatePart($templates['instructions'] ?? null, $task, $instructions);
+        $renderedTask = $this->renderTemplatePart($templates['task'] ?? null, $task, $instructions, false);
+        $renderedInstructions = $this->renderTemplatePart($templates['instructions'] ?? null, $task, $instructions, true);
 
         $combined = implode("\n", array_values(array_filter([
-            $renderedTask,
             $renderedInstructions,
+            $renderedTask,
         ], static fn (?string $value) => $value !== null && $value !== '')));
         $combined = trim($combined);
 
@@ -472,9 +473,13 @@ class CodexCliSessionService
         ];
     }
 
-    private function renderTemplatePart(?string $template, ?string $task, ?string $instructions): ?string
+    private function renderTemplatePart(?string $template, ?string $task, ?string $instructions, bool $isInstructions): ?string
     {
         if ($template === null || $template === '') {
+            return null;
+        }
+
+        if ($isInstructions && ($instructions === null || $instructions === '')) {
             return null;
         }
 
@@ -498,25 +503,35 @@ class CodexCliSessionService
         ?string $instructionsTemplate,
         ?string $renderedTask,
         ?string $renderedInstructions,
-        ?string $combined
+        ?string $combined,
+        bool $includeRendered = true
     ): array {
-        $templatePayload = array_filter([
-            'task' => $taskTemplate !== null && trim($taskTemplate) !== '' ? trim($taskTemplate) : null,
-            'instructions' => $instructionsTemplate !== null && trim($instructionsTemplate) !== '' ? trim($instructionsTemplate) : null,
-        ], static fn ($value) => $value !== null && $value !== '');
+        $templateTask = $taskTemplate !== null && trim($taskTemplate) !== '' ? trim($taskTemplate) : null;
+        $templateInstructions = $instructionsTemplate !== null && trim($instructionsTemplate) !== '' ? trim($instructionsTemplate) : null;
+        $renderedTaskValue = $renderedTask !== null && trim($renderedTask) !== '' ? trim($renderedTask) : null;
+        $renderedInstructionsValue = $renderedInstructions !== null && trim($renderedInstructions) !== '' ? trim($renderedInstructions) : null;
+        $combinedValue = $combined !== null && trim($combined) !== '' ? trim($combined) : null;
 
-        if ($templatePayload !== []) {
-            $event['task_format_template'] = $templatePayload;
+        if ($templateTask !== null) {
+            $event['template_task'] = $templateTask;
         }
 
-        $renderedPayload = array_filter([
-            'task' => $renderedTask !== null && trim($renderedTask) !== '' ? trim($renderedTask) : null,
-            'instructions' => $renderedInstructions !== null && trim($renderedInstructions) !== '' ? trim($renderedInstructions) : null,
-            'combined' => $combined !== null && trim($combined) !== '' ? trim($combined) : null,
-        ], static fn ($value) => $value !== null && $value !== '');
+        if ($templateInstructions !== null) {
+            $event['template_instructions'] = $templateInstructions;
+        }
 
-        if ($renderedPayload !== []) {
-            $event['task_format_rendered'] = $renderedPayload;
+        if ($includeRendered) {
+            if ($renderedTaskValue !== null) {
+                $event['task_rendered'] = $renderedTaskValue;
+            }
+
+            if ($renderedInstructionsValue !== null) {
+                $event['instructions_rendered'] = $renderedInstructionsValue;
+            }
+
+            if ($combinedValue !== null) {
+                $event['full_message_rendered'] = $combinedValue;
+            }
         }
 
         return $event;
@@ -719,7 +734,7 @@ class CodexCliSessionService
         $isResuming = is_string($resumedThreadId) && $resumedThreadId !== '';
 
         $instructions = isset($state['system_instructions']) ? trim((string) $state['system_instructions']) : '';
-        if ($instructions === '' || $isResuming) {
+        if ($instructions === '') {
             $instructions = null;
         }
 
@@ -749,9 +764,12 @@ class CodexCliSessionService
 
             $event = [
                 'type' => 'thread.request',
-                'instructions' => $instructions,
                 'task' => $task,
             ];
+
+            if ($instructions !== null) {
+                $event['instructions'] = $instructions;
+            }
         }
 
         $event = $this->maybeAttachTaskFormat(
@@ -764,7 +782,7 @@ class CodexCliSessionService
         );
 
         foreach ($meta as $key => $value) {
-            if (in_array($key, ['type', 'instructions', 'task', 'task_format_template', 'task_format_rendered'], true)) {
+            if (in_array($key, ['type', 'instructions', 'task', 'template_task', 'template_instructions', 'task_rendered', 'instructions_rendered', 'full_message_rendered'], true)) {
                 continue;
             }
 
@@ -964,9 +982,6 @@ class CodexCliSessionService
                 ]);
 
             case 'workspace':
-                $template = is_array($event['task_format_template'] ?? null) ? $event['task_format_template'] : [];
-                $renderedFormat = is_array($event['task_format_rendered'] ?? null) ? $event['task_format_rendered'] : [];
-
                 return $this->formatLines([
                     'workspace',
                     isset($event['provider']) ? 'provider: '.$event['provider'] : null,
@@ -974,11 +989,11 @@ class CodexCliSessionService
                     isset($event['platform_path']) ? 'platform: '.$event['platform_path'] : null,
                     isset($event['session_log_path']) ? 'logs: '.$event['session_log_path'] : null,
                     isset($event['model']) ? 'model: '.$event['model'] : null,
-                    isset($template['task']) ? 'task template: '.$template['task'] : null,
-                    isset($template['instructions']) ? 'instructions template: '.$template['instructions'] : null,
-                    isset($renderedFormat['task']) ? 'task rendered: '.$renderedFormat['task'] : null,
-                    isset($renderedFormat['instructions']) ? 'instructions rendered: '.$renderedFormat['instructions'] : null,
-                    isset($renderedFormat['combined']) ? 'formatted task: '.$renderedFormat['combined'] : null,
+                    isset($event['template_task']) ? 'template (task): '.$event['template_task'] : null,
+                    isset($event['template_instructions']) ? 'template (instructions): '.$event['template_instructions'] : null,
+                    isset($event['instructions_rendered']) ? 'instructions rendered: '.$event['instructions_rendered'] : null,
+                    isset($event['task_rendered']) ? 'task rendered: '.$event['task_rendered'] : null,
+                    isset($event['full_message_rendered']) ? 'full message: '.$event['full_message_rendered'] : null,
                 ]);
 
             case 'turn.started':

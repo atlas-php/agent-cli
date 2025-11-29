@@ -85,13 +85,17 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertSame('codex', $workspaceEvent['provider'] ?? null);
         $this->assertSame(realpath($workspacePath) ?: $workspacePath, $workspaceEvent['workspace_path'] ?? null);
         $this->assertSame($expectedDirectory, $workspaceEvent['session_log_path'] ?? null);
+        $this->assertSame('Task: {TASK}', $workspaceEvent['template_task'] ?? null);
+        $this->assertSame('Instructions: {INSTRUCTIONS}', $workspaceEvent['template_instructions'] ?? null);
+        $this->assertArrayNotHasKey('task_rendered', $workspaceEvent);
+        $this->assertArrayNotHasKey('instructions_rendered', $workspaceEvent);
+        $this->assertArrayNotHasKey('full_message_rendered', $workspaceEvent);
 
         $firstEvent = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($firstEvent);
         $this->assertSame('thread.request', $firstEvent['type'] ?? null);
-        $this->assertSame("Task: tasks:list\nInstructions:", $firstEvent['task'] ?? null);
-        $this->assertArrayHasKey('instructions', $firstEvent);
-        $this->assertNull($firstEvent['instructions']);
+        $this->assertSame('Task: tasks:list', $firstEvent['task'] ?? null);
+        $this->assertArrayNotHasKey('instructions', $firstEvent);
 
         $this->assertStringContainsString('thread request', $output);
         $this->assertStringContainsString('thread started', $output);
@@ -240,7 +244,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertIsArray($threadRequest);
         $this->assertSame('thread.request', $threadRequest['type'] ?? null);
         $this->assertSame('Follow these', $threadRequest['instructions'] ?? null);
-        $this->assertSame("Task: local override\nInstructions: Follow these", $threadRequest['task'] ?? null);
+        $this->assertSame("Instructions: Follow these\nTask: local override", $threadRequest['task'] ?? null);
 
         $threadStarted = json_decode($lines[2] ?? '', true);
         $this->assertIsArray($threadStarted);
@@ -293,7 +297,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertIsArray($threadRequest);
         $this->assertSame('thread.request', $threadRequest['type'] ?? null);
         $this->assertSame('Always lint', $threadRequest['instructions'] ?? null);
-        $this->assertSame("Task: tasks:list --plan\nInstructions: Always lint", $threadRequest['task'] ?? null);
+        $this->assertSame("Instructions: Always lint\nTask: tasks:list --plan", $threadRequest['task'] ?? null);
     }
 
     public function test_task_format_template_is_logged_and_applied(): void
@@ -348,33 +352,26 @@ final class CodexCliSessionServiceTest extends TestCase
         $workspaceEvent = json_decode($lines[0] ?? '', true);
         $this->assertIsArray($workspaceEvent);
         $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
-        $this->assertIsArray($workspaceEvent['task_format_template'] ?? null);
-        $this->assertSame('Task: {TASK}', $workspaceEvent['task_format_template']['task'] ?? null);
-        $this->assertSame('Instructions: {INSTRUCTIONS}', $workspaceEvent['task_format_template']['instructions'] ?? null);
-        $this->assertIsArray($workspaceEvent['task_format_rendered'] ?? null);
-        $this->assertSame('Task: tasks:list --plan', $workspaceEvent['task_format_rendered']['task'] ?? null);
-        $this->assertSame('Instructions: Follow the handbook', $workspaceEvent['task_format_rendered']['instructions'] ?? null);
-        $this->assertSame(
-            "Task: tasks:list --plan\nInstructions: Follow the handbook",
-            $workspaceEvent['task_format_rendered']['combined'] ?? null
-        );
+        $this->assertSame('Task: {TASK}', $workspaceEvent['template_task'] ?? null);
+        $this->assertSame('Instructions: {INSTRUCTIONS}', $workspaceEvent['template_instructions'] ?? null);
+        $this->assertArrayNotHasKey('task_rendered', $workspaceEvent);
+        $this->assertArrayNotHasKey('instructions_rendered', $workspaceEvent);
+        $this->assertArrayNotHasKey('full_message_rendered', $workspaceEvent);
 
         $threadRequest = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($threadRequest);
         $this->assertSame('thread.request', $threadRequest['type'] ?? null);
         $this->assertSame(
-            "Task: tasks:list --plan\nInstructions: Follow the handbook",
+            "Instructions: Follow the handbook\nTask: tasks:list --plan",
             $threadRequest['task'] ?? null
         );
-        $this->assertIsArray($threadRequest['task_format_template'] ?? null);
-        $this->assertSame('Task: {TASK}', $threadRequest['task_format_template']['task'] ?? null);
-        $this->assertSame('Instructions: {INSTRUCTIONS}', $threadRequest['task_format_template']['instructions'] ?? null);
-        $this->assertIsArray($threadRequest['task_format_rendered'] ?? null);
-        $this->assertSame('Task: tasks:list --plan', $threadRequest['task_format_rendered']['task'] ?? null);
-        $this->assertSame('Instructions: Follow the handbook', $threadRequest['task_format_rendered']['instructions'] ?? null);
+        $this->assertSame('Task: {TASK}', $threadRequest['template_task'] ?? null);
+        $this->assertSame('Instructions: {INSTRUCTIONS}', $threadRequest['template_instructions'] ?? null);
+        $this->assertSame('Task: tasks:list --plan', $threadRequest['task_rendered'] ?? null);
+        $this->assertSame('Instructions: Follow the handbook', $threadRequest['instructions_rendered'] ?? null);
         $this->assertSame(
-            "Task: tasks:list --plan\nInstructions: Follow the handbook",
-            $threadRequest['task_format_rendered']['combined'] ?? null
+            "Instructions: Follow the handbook\nTask: tasks:list --plan",
+            $threadRequest['full_message_rendered'] ?? null
         );
         $this->assertSame('Follow the handbook', $threadRequest['instructions'] ?? null);
     }
@@ -427,7 +424,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertSame('thread.request', $threadRequest['type'] ?? null);
         $this->assertSame('assistant-1', $threadRequest['assistant_id'] ?? null);
         $this->assertSame(42, $threadRequest['user_id'] ?? null);
-        $this->assertSame("Task: run diagnostics\nInstructions:", $threadRequest['task'] ?? null);
+        $this->assertSame('Task: run diagnostics', $threadRequest['task'] ?? null);
         $this->assertArrayNotHasKey('assistant_id', json_decode($lines[2] ?? '{}', true) ?: []);
     }
 
@@ -483,7 +480,12 @@ final class CodexCliSessionServiceTest extends TestCase
         $firstEvent = json_decode($lines[1] ?? '', true);
         $this->assertIsArray($firstEvent);
         $this->assertSame('thread.resumed', $firstEvent['type'] ?? null);
-        $this->assertSame("Task: continue troubleshooting\nInstructions:", $firstEvent['task'] ?? null);
+        $this->assertSame('Task: continue troubleshooting', $firstEvent['task'] ?? null);
+        $this->assertSame('Task: {TASK}', $firstEvent['template_task'] ?? null);
+        $this->assertSame('Instructions: {INSTRUCTIONS}', $firstEvent['template_instructions'] ?? null);
+        $this->assertSame('Task: continue troubleshooting', $firstEvent['task_rendered'] ?? null);
+        $this->assertArrayNotHasKey('instructions_rendered', $firstEvent);
+        $this->assertSame('Task: continue troubleshooting', $firstEvent['full_message_rendered'] ?? null);
         $this->assertArrayNotHasKey('instructions', $firstEvent);
     }
 
