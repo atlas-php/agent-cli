@@ -7,7 +7,8 @@
         "php": "^8.2",
         "illuminate/support": "^10.0|^11.0|^12.0",
         "illuminate/console": "^10.0|^11.0|^12.0",
-        "symfony/process": "^6.3|^7.0"
+        "symfony/process": "^6.3|^7.0",
+        "atlas-php/core": "^0.3"
     },
     "require-dev": {
         "laravel/pint": "^1.13",

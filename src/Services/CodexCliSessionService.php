@@ -17,6 +17,13 @@ use Symfony\Component\Process\Process;
  */
 class CodexCliSessionService
 {
+    private string $sessionDirectory;
+
+    public function __construct(?string $sessionDirectory = null)
+    {
+        $this->sessionDirectory = $sessionDirectory ?? storage_path('app/codex_sessions');
+    }
+
     /**
      * @param  array<int, string>  $arguments
      * @return array{session_id: string, json_file_path: string|null, exit_code: int|null}
@@ -149,7 +156,7 @@ class CodexCliSessionService
 
     private function prepareJsonLogFile(string $sessionId): string
     {
-        $directory = storage_path('app/codex_sessions');
+        $directory = $this->sessionDirectory;
 
         if (! is_dir($directory)) {
             mkdir($directory, 0755, true);

@@ -47,11 +47,12 @@ Options:
 
 * `args*` – the exact arguments to forward to the Codex CLI.
 * `--interactive` – run Codex directly attached to your terminal (no JSON logging).
+* `--model=` – override the Codex model for the current run.
 
 Upon completion the command prints:
 
 * Codex session/thread identifier.
-* Absolute path to the JSONL log file stored at `storage/app/codex_sessions`.
+* Absolute path to the JSONL log file stored at the configured sessions directory.
 * Exit code emitted by the Codex CLI process.
 
 ### Service
@@ -68,12 +69,25 @@ $result = app(CodexCliSessionService::class)->startSession([
 
 // $result = [
 //     'session_id' => 'thread_abc123',
-//     'json_file_path' => storage_path('app/codex_sessions/thread_abc123.jsonl'),
+//     'json_file_path' => config('atlas-agent-cli.sessions.path').'/thread_abc123.jsonl',
 //     'exit_code' => 0,
 // ];
 ```
 
 The service handles both interactive and headless runs, automatically sanitizes ANSI escape sequences, streams events to STDOUT/STDERR, and records every Codex JSON event to a JSON Lines log.
+
+## Configuration
+
+Publish the configuration file to customize session storage and Codex defaults:
+
+```bash
+php artisan vendor:publish --tag=atlas-agent-cli-config
+```
+
+The `config/atlas-agent-cli.php` file exposes:
+
+* `sessions.path` – where JSONL transcripts are persisted. Defaults to `storage/app/codex_sessions`.
+* `model` – Codex model automatically applied to each run unless overridden with `--model` (defaults to `gpt-5.1-codex-max`). Available models are listed at [OpenAI Codex models](https://developers.openai.com/codex/models).
 
 ## Local Sandbox
 

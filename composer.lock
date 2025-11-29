@@ -4,8 +4,49 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1cf15cbfbc1748a5a3396837f9095bb4",
+    "content-hash": "5cede087a619cb3afb166f33497ddf89",
     "packages": [
+        {
+            "name": "atlas-php/core",
+            "version": "v0.3.1",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/atlas-php/core.git",
+                "reference": "002014f6db1922d92fae9f71e86bbe5471563ef9"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/atlas-php/core/zipball/002014f6db1922d92fae9f71e86bbe5471563ef9",
+                "reference": "002014f6db1922d92fae9f71e86bbe5471563ef9",
+                "shasum": ""
+            },
+            "require": {
+                "illuminate/support": "^10.0|^11.0|^12.0",
+                "php": "^8.2"
+            },
+            "require-dev": {
+                "larastan/larastan": "^3.0",
+                "laravel/pint": "^1.13",
+                "orchestra/testbench": "^8.13 || ^9.0",
+                "phpunit/phpunit": "^10.5"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Atlas\\Core\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "description": "Core utilities for Atlas PHP Laravel packages.",
+            "support": {
+                "issues": "https://github.com/atlas-php/core/issues",
+                "source": "https://github.com/atlas-php/core/tree/v0.3.1"
+            },
+            "time": "2025-11-22T15:03:59+00:00"
+        },
         {
             "name": "brick/math",
             "version": "0.14.1",

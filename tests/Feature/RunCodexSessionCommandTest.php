@@ -27,11 +27,13 @@ final class RunCodexSessionCommandTest extends TestCase
 
     public function test_command_runs_session_and_prints_summary(): void
     {
+        config()->set('atlas-agent-cli.model', 'gpt-5.1-codex-max');
+
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['tasks:list'], false)
+            ->with(['--model=gpt-5.1-codex-max', 'tasks:list'], false)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -52,6 +54,8 @@ final class RunCodexSessionCommandTest extends TestCase
 
     public function test_command_reports_failure_when_service_throws(): void
     {
+        config()->set('atlas-agent-cli.model', null);
+
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
@@ -66,5 +70,32 @@ final class RunCodexSessionCommandTest extends TestCase
         $command
             ->expectsOutput('Codex session failed: bad run')
             ->assertExitCode(Command::FAILURE);
+    }
+
+    public function test_command_can_override_model_via_option(): void
+    {
+        config()->set('atlas-agent-cli.model', 'gpt-5.1-codex-max');
+
+        /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
+        $mockService = Mockery::mock(CodexCliSessionService::class);
+        $this->mockExpectation($mockService, 'startSession')
+            ->once()
+            ->with(['--model=o1-mini', 'tasks:list'], false)
+            ->andReturn([
+                'session_id' => 'thread-xyz',
+                'json_file_path' => '/tmp/thread-xyz.jsonl',
+                'exit_code' => 0,
+            ]);
+
+        $this->app->instance(CodexCliSessionService::class, $mockService);
+
+        /** @var \Illuminate\Testing\PendingCommand $command */
+        $command = $this->artisan('codex:session', [
+            'args' => ['tasks:list'],
+            '--model' => 'o1-mini',
+        ]);
+        $command
+            ->expectsOutput('Codex session completed.')
+            ->assertExitCode(Command::SUCCESS);
     }
 }

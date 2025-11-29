@@ -6,8 +6,8 @@ namespace Atlas\Agent\Tests;
 
 use Atlas\Agent\Providers\AgentCliServiceProvider;
 use Mockery;
+use Mockery\Expectation;
 use Mockery\MockInterface;
-use Mockery\ExpectationInterface;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
 
 /**
@@ -27,6 +27,7 @@ abstract class TestCase extends OrchestraTestCase
         }
 
         $this->app->useStoragePath($storagePath);
+        config()->set('atlas-agent-cli.sessions.path', storage_path('app/codex_sessions'));
     }
 
     protected function tearDown(): void
@@ -56,9 +57,9 @@ abstract class TestCase extends OrchestraTestCase
      *
      * @param  T  $mock
      */
-    protected function mockExpectation(MockInterface $mock, string $method): ExpectationInterface
+    protected function mockExpectation(MockInterface $mock, string $method): Expectation
     {
-        /** @var ExpectationInterface $expectation */
+        /** @var Expectation $expectation */
         $expectation = $mock->shouldReceive($method);
 
         return $expectation;

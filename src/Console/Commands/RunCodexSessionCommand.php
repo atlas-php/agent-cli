@@ -17,7 +17,11 @@ class RunCodexSessionCommand extends Command
     /**
      * @var string
      */
-    protected $signature = 'codex:session {args?* : Arguments to pass to the Codex CLI} {--interactive : Run Codex attached to your terminal without logging}';
+    protected $signature = 'codex:session
+        {args?* : Arguments to pass to the Codex CLI}
+        {--interactive : Run Codex attached to your terminal without logging}
+        {--model= : Override the Codex model for this run}
+    ';
 
     /**
      * @var string
@@ -34,6 +38,7 @@ class RunCodexSessionCommand extends Command
 
     public function handle(): int
     {
+        /** @var mixed $rawArguments */
         $rawArguments = $this->argument('args');
         $arguments = [];
 
@@ -44,7 +49,7 @@ class RunCodexSessionCommand extends Command
                 }
                 $arguments[] = (string) $argument;
             }
-        } elseif (is_scalar($rawArguments) && $rawArguments !== '') {
+        } elseif (is_string($rawArguments) && $rawArguments !== '') {
             $arguments[] = (string) $rawArguments;
         }
 
@@ -54,6 +59,7 @@ class RunCodexSessionCommand extends Command
             return self::FAILURE;
         }
 
+        $arguments = $this->injectRuntimeOptions($arguments);
         $interactive = (bool) $this->option('interactive');
 
         try {
@@ -71,5 +77,62 @@ class RunCodexSessionCommand extends Command
         $this->line('Exit code: '.$result['exit_code']);
 
         return $result['exit_code'] ?? self::SUCCESS;
+    }
+
+    /**
+     * @param  array<int, string>  $arguments
+     * @return array<int, string>
+     */
+    private function injectRuntimeOptions(array $arguments): array
+    {
+        $injected = [];
+
+        $model = $this->resolveModelOption();
+        if ($model !== null && $this->shouldInjectFlag($arguments, '--model')) {
+            $injected[] = '--model='.$model;
+        }
+
+        if ($injected === []) {
+            return $arguments;
+        }
+
+        return array_merge($injected, $arguments);
+    }
+
+    private function resolveModelOption(): ?string
+    {
+        $option = $this->option('model');
+        if (is_string($option)) {
+            $option = trim($option);
+        }
+
+        if (is_string($option) && $option !== '') {
+            return $option;
+        }
+
+        $configured = config('atlas-agent-cli.model');
+        if (is_string($configured)) {
+            $configured = trim($configured);
+        }
+
+        return is_string($configured) && $configured !== '' ? $configured : null;
+    }
+
+    /**
+     * @param  array<int, string>  $arguments
+     */
+    private function shouldInjectFlag(array $arguments, string $flag): bool
+    {
+        foreach ($arguments as $argument) {
+            if ($argument === $flag) {
+                return false;
+            }
+
+            if (str_starts_with($argument, $flag.'=')) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

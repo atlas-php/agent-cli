@@ -65,7 +65,8 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertSame('thread-123', $result['session_id']);
         $this->assertSame(0, $result['exit_code']);
 
-        $expectedPath = storage_path('app/codex_sessions/thread-123.jsonl');
+        $expectedDirectory = (string) config('atlas-agent-cli.sessions.path');
+        $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-123.jsonl';
         $this->assertSame($expectedPath, $result['json_file_path']);
         $this->assertFileExists($expectedPath);
 
@@ -158,7 +159,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
     private function cleanCodexDirectory(): void
     {
-        $directory = storage_path('app/codex_sessions');
+        $directory = (string) config('atlas-agent-cli.sessions.path');
 
         if (! is_dir($directory)) {
             return;
