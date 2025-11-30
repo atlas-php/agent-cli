@@ -4,21 +4,34 @@
 [![coverage](https://codecov.io/github/atlas-php/agent-cli/branch/main/graph/badge.svg)](https://codecov.io/github/atlas-php/agent-cli)
 [![License](https://img.shields.io/github/license/atlas-php/agent-cli.svg)](LICENSE)
 
-**Atlas Agent CLI** is a Laravel-ready wrapper around the Codex coding agent CLI. It exposes an Artisan command and service layer that stream Codex output, sanitize ANSI characters, persist JSONL logs, and report a summarized transcript in real time.
+**Atlas Agent CLI** (coding agent) is a streamlined Laravel wrapper around the Codex CLI. It provides a unified command and service layer for running Codex tasks with clean streaming output, ANSI sanitization, structured JSONL logging, and optional headless or interactive execution.
 
 ## Table of Contents
-- [Overview](#overview)
-- [Installation](#installation)
-- [Usage](#usage)
-  - [Artisan Command](#artisan-command)
-  - [Service](#service)
-- [Local Sandbox](#local-sandbox)
-- [Testing](#testing)
-- [Contributing](#contributing)
-- [License](#license)
+
+* [Overview](#overview)
+* [Features](#features)
+* [Installation](#installation)
+* [Usage](#usage)
+    * [Artisan Command](#artisan-command)
+    * [Service Layer](#service-layer)
+* [Configuration](#configuration)
+* [Local Sandbox](#local-sandbox)
+* [Testing](#testing)
+* [Contributing](#contributing)
+* [License](#license)
 
 ## Overview
-Agent CLI mirrors the raw `codex` CLI while layering Laravel-native ergonomics: streaming output, ANSI sanitizing, JSON Lines logging, and command/service APIs for both interactive and headless sessions.
+
+Atlas Agent CLI mirrors the native `codex` CLI while adding Laravel-native ergonomics. It standardizes how Codex sessions are started, streamed, logged, and resumed—making it easier to integrate code-generation workflows into Laravel applications or automated pipelines.
+
+## Features
+
+* Clean stream handling with automatic ANSI sanitization.
+* JSON Lines transcript logging for every run.
+* Resume support for Codex threads.
+* Task and instruction templating.
+* Per-run model, reasoning, approval, and workspace overrides.
+* Laravel-ready command and service APIs.
 
 ## Installation
 
@@ -26,7 +39,7 @@ Agent CLI mirrors the raw `codex` CLI while layering Laravel-native ergonomics: 
 composer require atlas-php/agent-cli
 ```
 
-The package registers itself automatically through Laravel's package auto-discovery. When running in Lumen or if auto-discovery is disabled, register the provider manually:
+The package auto-discovers its service provider. If necessary, register it manually:
 
 ```php
 // bootstrap/app.php or config/app.php
@@ -37,87 +50,77 @@ Atlas\Agent\Providers\AgentCliServiceProvider::class,
 
 ### Artisan Command
 
-The command mirrors the raw `codex` CLI but adds streaming and JSON logging:
+Run Codex through Laravel with streaming output and automatic logging:
 
 ```bash
 php artisan agent:codex -- tasks:list --plan
 ```
 
-Options:
+Key options:
 
-* `args*` – the exact arguments to forward to the Codex CLI.
-* `--interactive` – run Codex directly attached to your terminal (no JSON logging).
-* `--model=` – override the Codex model for the current run.
-* `--reasoning=` – set the Codex reasoning strategy (for example: `medium`, `deep`) for this run; forwarded to Codex as `--config model_reasoning_effort=<value>`.
-* `--approval=` – set the Codex approval policy (`untrusted`, `on-failure`, `on-request`, `never`) for this run; forwarded to Codex as `--config approval_policy=<value>`.
-* `--instructions=` – prepend additional system instructions ahead of the user task; stored in the JSON log as a `thread.request` event.
-* `--template-task=` / `--template-instructions=` – override the configured task/instructions templates for a single run when you want to reshape the payload without editing config.
-* `--meta=` – supply a JSON object of metadata (IDs, tags, etc.) that is recorded alongside the synthetic thread lifecycle log entry.
-* `--resume=` – continue an existing Codex thread; the wrapper preserves the thread identifier, writes a `thread.resumed` log entry for the new task, and still forwards only your task arguments to Codex.
-* `--workspace=` – override the working directory Codex uses for this run (falls back to the configured workspace when omitted). The command executes Codex from this path and logs it inside the `workspace` JSONL entry alongside the provider name.
+* `args*` – forwarded directly to the Codex CLI.
+* `--interactive` – attach Codex to your terminal (no JSON logging).
+* `--model=` – override the Codex model.
+* `--reasoning=` – specify the reasoning effort.
+* `--approval=` – override approval policy.
+* `--instructions=` – prepend system instructions.
+* `--template-task=` / `--template-instructions=` – override templates.
+* `--meta=` – attach metadata recorded in the transcript.
+* `--resume=` – resume an existing Codex thread.
+* `--workspace=` – override the execution directory.
 
-Upon completion the command prints:
+After completion, the command prints:
 
-* Codex session/thread identifier.
-* Absolute path to the JSONL log file stored at the configured sessions directory.
-* Exit code emitted by the Codex CLI process.
+* Codex session/thread ID.
+* Path to the JSONL transcript.
+* Exit code from the Codex process.
 
-### Service
+### Service Layer
 
-Consume the `Atlas\Agent\Services\CodexCliSessionService` directly when you need custom orchestration:
+Use the service for programmatic orchestration:
 
 ```php
 use Atlas\Agent\Services\CodexCliSessionService;
 
 $result = app(CodexCliSessionService::class)->startSession([
-    'tasks:list',
-    '--plan',
+    'tasks:list', '--plan'
 ]);
-
-// $result = [
-//     'session_id' => 'thread_abc123',
-//     'json_file_path' => config('atlas-agent-cli.sessions.path').'/thread_abc123.jsonl',
-//     'exit_code' => 0,
-// ];
 ```
 
-The service handles both interactive and headless runs, automatically sanitizes ANSI escape sequences, streams events to STDOUT/STDERR, and records every Codex JSON event to a JSON Lines log.
+The service:
 
-When invoking the service directly you may pass a workspace override and optional task/instruction templates as the final arguments (`startSession($args, $interactive, ..., $workspaceOverride, $templates)`), mirroring the `--workspace` and `--template-*` console options.
-
-Each headless log now begins with a `workspace` entry that captures the provider (`codex`), the Codex workspace path, the platform path, the JSONL log directory, the effective model, the reasoning strategy, and the approval policy for the run. This is followed by the synthetic `thread.request` (or `thread.resumed`) entry summarizing system instructions, the triggering task, and any metadata supplied via `--meta`, so downstream tooling can reconstruct the full prompt context. When resuming a thread via `--resume`, the log still records a `thread.resumed` entry containing the latest user task (plus metadata) without re-stating the original instructions.
-If you abort a headless run with a signal such as `CTRL+C`, the transcript includes a final `thread.terminated` event with the received signal so consumers can see the session ended manually.
+* Streams output to STDOUT/STDERR.
+* Logs all events as JSONL.
+* Sanitizes ANSI sequences.
+* Supports workspace and template overrides.
+* Records synthetic `thread.request`, `thread.resumed`, and `thread.terminated` events.
 
 ## Configuration
 
-Publish the configuration file to customize session storage and Codex defaults:
+Publish the config to customize storage paths, Codex defaults, and templates:
 
 ```bash
 php artisan vendor:publish --tag=atlas-agent-cli-config
-
-php sandbox/artisan agent:codex --workspace="/Users/marois/Development/Atlasphp/Repo/agent-cli" "say hello"
 ```
 
-The `config/atlas-agent-cli.php` file exposes:
+Configuration options include:
 
-* `sessions.path` – base directory for JSONL transcripts. Atlas Agent CLI stores Codex logs inside `<path>/codex`. Defaults to `storage/app/sessions`.
-* `workspace.path` – the working directory Codex should execute within. Defaults to your Laravel application's base path but can be pointed at any detached workspace (override via the `--workspace` command option for per-run overrides).
-* `providers.codex.model` / `providers.codex.reasoning` / `providers.codex.approval` – default Codex runtime options applied unless overridden via `--model`, `--reasoning`, or `--approval`. Defaults: model `gpt-5.1-codex-max`, reasoning `medium`, approval `never`.
-* `template.task` / `template.instructions` – string templates (defaults to `Task: {TASK}` and `Instructions: {INSTRUCTIONS}`) that shape how the task and instructions are combined before forwarding them to Codex. Workspace logs record the templates, and thread request/resume entries include the rendered messages (instructions first, then task) so you can see exactly what Codex receives.
+* `sessions.path` – base directory for JSONL logs.
+* `workspace.path` – default Codex working directory.
+* `providers.codex.*` – default model, reasoning, approval values.
+* `template.*` – instruction and task templates.
 
 ## Local Sandbox
 
-The repository ships with a minimal Laravel sandbox so you can run the `agent:codex` command without installing the package into a real application. The sandbox has no database and only registers the Agent CLI service provider.
+The package includes a minimal Laravel sandbox for local experimentation:
 
 ```bash
 php sandbox/artisan agent:codex -- tasks:list --plan
 ```
 
-JSON transcripts are stored inside `sandbox/storage/app/sessions/codex`. Pass `--interactive` to talk directly to Codex without log files.
+Logs are stored at `sandbox/storage/app/sessions/codex`.
 
 ## Testing
-
-Run Pint, PHPUnit, and Larastan from the package root:
 
 ```bash
 composer lint
@@ -126,7 +129,9 @@ composer analyse
 ```
 
 ## Contributing
+
 See the [Contributing Guide](./.github/CONTRIBUTING.md) and [Agents](./AGENTS.md).
 
 ## License
+
 MIT — see [LICENSE](./LICENSE).
