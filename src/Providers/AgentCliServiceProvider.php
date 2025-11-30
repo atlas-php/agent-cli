@@ -6,6 +6,8 @@ namespace Atlas\Agent\Providers;
 
 use Atlas\Agent\Console\Commands\RunCodexSessionCommand;
 use Atlas\Agent\Services\CodexCliSessionService;
+use Atlas\Agent\Services\CommandRenderers\CodexCommandOutputRenderer;
+use Atlas\Agent\Services\CommandRenderers\SessionCommandOutputRendererRegistry;
 use Atlas\Agent\Services\SessionTranscripts\CodexSessionTranscriptParser;
 use Atlas\Agent\Services\SessionTranscripts\SessionTranscriptService;
 use Atlas\Core\Providers\PackageServiceProvider;
@@ -25,6 +27,12 @@ class AgentCliServiceProvider extends PackageServiceProvider
             $this->packageConfigPath('atlas-agent-cli.php'),
             'atlas-agent-cli'
         );
+
+        $this->app->singleton(SessionCommandOutputRendererRegistry::class, function (): SessionCommandOutputRendererRegistry {
+            return new SessionCommandOutputRendererRegistry([
+                new CodexCommandOutputRenderer,
+            ]);
+        });
 
         $this->app->singleton(CodexCliSessionService::class, function (): CodexCliSessionService {
             $sessionsBasePath = (string) config('atlas-agent-cli.sessions.path', storage_path('app/sessions'));

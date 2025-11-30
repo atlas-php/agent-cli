@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Atlas\Agent\Console\Commands;
 
 use Atlas\Agent\Services\CodexCliSessionService;
+use Atlas\Agent\Services\CommandRenderers\SessionCommandOutputRendererRegistry;
 use Illuminate\Console\Command;
-use Symfony\Component\Process\Process;
 
 /**
  * Class RunCodexSessionCommand
@@ -41,12 +41,13 @@ class RunCodexSessionCommand extends Command
 
     private CodexCliSessionService $sessionService;
 
-    private string $lastUsageLine = '';
+    private SessionCommandOutputRendererRegistry $rendererRegistry;
 
-    public function __construct(CodexCliSessionService $sessionService)
+    public function __construct(CodexCliSessionService $sessionService, SessionCommandOutputRendererRegistry $rendererRegistry)
     {
         parent::__construct();
         $this->sessionService = $sessionService;
+        $this->rendererRegistry = $rendererRegistry;
     }
 
     public function handle(): int
@@ -54,7 +55,6 @@ class RunCodexSessionCommand extends Command
         /** @var mixed $rawArguments */
         $rawArguments = $this->argument('args');
         $arguments = [];
-        $this->lastUsageLine = '';
 
         if (is_array($rawArguments)) {
             foreach ($rawArguments as $argument) {
@@ -88,7 +88,9 @@ class RunCodexSessionCommand extends Command
         $arguments = $this->injectRuntimeOptions($arguments);
         $interactive = (bool) $this->option('interactive');
         $taskFormatTemplates = $this->resolveTemplateOptions();
-        $outputHandler = $interactive ? null : $this->buildOutputHandler();
+        $renderer = $this->rendererRegistry->forProvider(self::PROVIDER);
+        $renderer->reset();
+        $outputHandler = $interactive ? null : $renderer->buildHandler($this);
 
         try {
             $result = $this->sessionService->startSession(
@@ -108,9 +110,8 @@ class RunCodexSessionCommand extends Command
             return self::FAILURE;
         }
 
-        // @phpstan-ignore-next-line The usage line is populated during streamed output.
-        if ($this->lastUsageLine !== '') {
-            $this->info($this->lastUsageLine);
+        if ($renderer->lastUsageLine() !== '') {
+            $this->info($renderer->lastUsageLine());
         }
 
         $this->newLine();
@@ -395,45 +396,5 @@ class RunCodexSessionCommand extends Command
         }
 
         return true;
-    }
-
-    private function buildOutputHandler(): callable
-    {
-        return function (string $type, string $message): void {
-            $lines = array_values(array_filter(
-                array_map(static fn (string $line): string => trim($line), explode("\n", $message)),
-                static fn (string $line): bool => $line !== ''
-            ));
-
-            foreach ($lines as $line) {
-                if (str_contains($line, 'tokens used:')) {
-                    $this->lastUsageLine = $line;
-
-                    continue;
-                }
-
-                if ($type === Process::OUT && str_contains($line, '(exit code ')) {
-                    preg_match('/\\(exit code\\s+(-?\\d+)\\)/', $line, $matches);
-                    $exitCode = isset($matches[1]) ? (int) $matches[1] : 0;
-                    if ($exitCode !== 0) {
-                        $this->error($line);
-
-                        continue;
-                    }
-                }
-
-                if ($type === Process::ERR) {
-                    $this->error($line);
-
-                    continue;
-                }
-
-                if (str_starts_with($line, '- session started') || str_starts_with($line, '- session completed')) {
-                    $this->info($line);
-                } else {
-                    $this->line($line);
-                }
-            }
-        };
     }
 }
