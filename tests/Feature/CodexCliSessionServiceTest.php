@@ -134,7 +134,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $service->headlessProcess = $process;
 
-        $service->startSession(['--model=o1-mini', '--reasoning=medium', 'tasks:list'], false, 'tasks:list', null, null, null);
+        $service->startSession(['--model=o1-mini', '--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, null);
 
         $expectedDirectory = $this->codexSessionsDirectory();
         $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-modelled.jsonl';
@@ -180,7 +180,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $service->headlessProcess = $process;
 
-        $service->startSession(['--reasoning', 'deep', 'tasks:list'], false, 'tasks:list', null, null, null);
+        $service->startSession(['--config', 'model_reasoning_effort=deep', 'tasks:list'], false, 'tasks:list', null, null, null);
 
         $expectedDirectory = $this->codexSessionsDirectory();
         $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-reasoning.jsonl';

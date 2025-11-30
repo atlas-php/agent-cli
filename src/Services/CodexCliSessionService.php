@@ -49,7 +49,6 @@ class CodexCliSessionService
             ? $resumeThreadId
             : (string) Str::uuid();
         $workspacePath = $this->normalizeDirectoryPath($workspaceOverride) ?? $this->workspaceDirectory;
-
         if ($interactive) {
             $process = $this->runInteractive($arguments, $resumeThreadId, $workspacePath);
 
@@ -455,22 +454,60 @@ class CodexCliSessionService
                 return $value !== '' ? $value : null;
             }
 
+            if ($argument === '--config') {
+                $next = $arguments[$index + 1] ?? null;
+                $reasoningValue = $this->extractReasoningFromConfigValue(is_string($next) ? $next : null);
+                if ($reasoningValue !== null) {
+                    return $reasoningValue;
+                }
+
+                continue;
+            }
+
             if ($argument !== '--reasoning') {
+                if (str_starts_with($argument, '--config=')) {
+                    $value = substr($argument, 9);
+                    $reasoningValue = $this->extractReasoningFromConfigValue($value);
+                    if ($reasoningValue !== null) {
+                        return $reasoningValue;
+                    }
+                }
+
                 continue;
             }
 
             $next = $arguments[$index + 1] ?? null;
 
             if (is_string($next)) {
-                $value = trim($next);
+                $value = $this->extractReasoningFromConfigValue(trim($next));
 
-                if ($value !== '') {
+                if ($value !== null && $value !== '') {
                     return $value;
                 }
             }
         }
 
         return null;
+    }
+
+    private function extractReasoningFromConfigValue(?string $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (str_starts_with($trimmed, 'model_reasoning_effort=')) {
+            $reasoning = substr($trimmed, 23);
+
+            return $reasoning !== '' ? $reasoning : null;
+        }
+
+        return $trimmed;
     }
 
     /**

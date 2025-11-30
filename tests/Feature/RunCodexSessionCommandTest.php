@@ -34,7 +34,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=gpt-5.1-codex-max', '--reasoning=medium', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -62,7 +62,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--reasoning=medium', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
             ->andThrow(new \RuntimeException('bad run'));
 
         $this->app->instance(CodexCliSessionService::class, $mockService);
@@ -83,7 +83,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=o1-mini', '--reasoning=medium', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--model=o1-mini', '--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -111,7 +111,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=gpt-5.1-codex-max', '--reasoning=deep', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=deep', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -139,7 +139,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--reasoning=medium', 'tasks:list', '--plan'], false, 'tasks:list --plan', null, null, null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', 'tasks:list', '--plan'], false, 'tasks:list --plan', null, null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -162,7 +162,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--reasoning=medium', 'tasks:list'], false, 'tasks:list', null, null, null, '/tmp/codex-workspace', null)
+            ->with(['--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, null, '/tmp/codex-workspace', null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -188,7 +188,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--reasoning=medium', 'tasks:list'], false, 'tasks:list', 'Follow the handbook', null, null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', 'Follow the handbook', null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -215,7 +215,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->mockExpectation($mockService, 'startSession')
             ->once()
             ->with(
-                ['--reasoning=medium', 'tasks:list'],
+                ['--config=model_reasoning_effort=medium', 'tasks:list'],
                 false,
                 'tasks:list',
                 null,
@@ -253,7 +253,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--reasoning=medium', 'tasks:list'], false, 'tasks:list', null, ['assistant_id' => 'assistant-1'], null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, ['assistant_id' => 'assistant-1'], null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -293,7 +293,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--reasoning=medium', 'tasks:list'], false, 'tasks:list', null, null, 'thread-123', null, null)
+            ->with(['--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, 'thread-123', null, null)
             ->andReturn([
                 'session_id' => 'thread-123',
                 'json_file_path' => '/tmp/thread-123.jsonl',

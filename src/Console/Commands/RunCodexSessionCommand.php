@@ -124,8 +124,8 @@ class RunCodexSessionCommand extends Command
         }
 
         $reasoning = $this->resolveReasoningOption();
-        if ($reasoning !== null && $this->shouldInjectFlag($arguments, '--reasoning')) {
-            $injected[] = '--reasoning='.$reasoning;
+        if ($reasoning !== null && ! $this->hasReasoningConfiguration($arguments)) {
+            $injected[] = '--config=model_reasoning_effort='.$reasoning;
         }
 
         if ($injected === []) {
@@ -201,6 +201,37 @@ class RunCodexSessionCommand extends Command
         $configured = is_string($configured) ? trim($configured) : $configured;
 
         return is_string($configured) && $configured !== '' ? $configured : null;
+    }
+
+    /**
+     * @param  array<int, string>  $arguments
+     */
+    private function hasReasoningConfiguration(array $arguments): bool
+    {
+        foreach ($arguments as $index => $argument) {
+            if ($argument === '--reasoning') {
+                return true;
+            }
+
+            if (str_starts_with($argument, '--reasoning=')) {
+                return true;
+            }
+
+            if (str_starts_with($argument, '--config=')) {
+                if (str_contains($argument, 'model_reasoning_effort=')) {
+                    return true;
+                }
+            }
+
+            if ($argument === '--config') {
+                $next = $arguments[$index + 1] ?? null;
+                if (is_string($next) && str_starts_with($next, 'model_reasoning_effort=')) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function resolveInstructionsOption(): ?string

@@ -48,7 +48,7 @@ Options:
 * `args*` – the exact arguments to forward to the Codex CLI.
 * `--interactive` – run Codex directly attached to your terminal (no JSON logging).
 * `--model=` – override the Codex model for the current run.
-* `--reasoning=` – set the Codex reasoning strategy (for example: `medium`, `deep`) for this run.
+* `--reasoning=` – set the Codex reasoning strategy (for example: `medium`, `deep`) for this run; forwarded to Codex as `--config model_reasoning_effort=<value>`.
 * `--instructions=` – prepend additional system instructions ahead of the user task; stored in the JSON log as a `thread.request` event.
 * `--template-task=` / `--template-instructions=` – override the configured task/instructions templates for a single run when you want to reshape the payload without editing config.
 * `--meta=` – supply a JSON object of metadata (IDs, tags, etc.) that is recorded alongside the synthetic thread lifecycle log entry.
