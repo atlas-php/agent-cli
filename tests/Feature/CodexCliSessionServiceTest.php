@@ -701,7 +701,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->mockExpectation($process, 'stop')
             ->once()
             ->with(0, SIGINT)
-            ->andReturnNull();
+            ->andReturn(null);
         $this->mockExpectation($process, 'isSuccessful')
             ->once()
             ->andReturn(false);

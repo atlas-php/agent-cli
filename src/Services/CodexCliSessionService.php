@@ -30,8 +30,6 @@ class CodexCliSessionService
 
     private bool $terminationRequested = false;
 
-    private ?int $terminationSignal = null;
-
     /**
      * @var array<int, callable|int|string|null>
      */
@@ -1515,7 +1513,6 @@ class CodexCliSessionService
         }
 
         $this->terminationRequested = true;
-        $this->terminationSignal = $signal;
 
         $sessionIdForLog = $codexSessionId !== null && $codexSessionId !== '' ? $codexSessionId : $generatedSessionId;
 
@@ -1624,6 +1621,5 @@ class CodexCliSessionService
     private function resetTerminationState(): void
     {
         $this->terminationRequested = false;
-        $this->terminationSignal = null;
     }
 }

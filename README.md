@@ -28,6 +28,7 @@ Atlas Agent CLI mirrors the native `codex` CLI while adding Laravel-native ergon
 
 * Clean stream handling with automatic ANSI sanitization.
 * JSON Lines transcript logging for every run.
+* Transcript parsing helpers for inspecting sessions (todos, turns, full history).
 * Resume support for Codex threads.
 * Task and instruction templating.
 * Per-run model, reasoning, approval, and workspace overrides.
@@ -94,6 +95,20 @@ The service:
 * Sanitizes ANSI sequences.
 * Supports workspace and template overrides.
 * Records synthetic `thread.request`, `thread.resumed`, and `thread.terminated` events.
+
+Parse a finished session transcript into actionable structures:
+
+```php
+use Atlas\Agent\Services\SessionTranscripts\SessionTranscriptService;
+
+/** @var SessionTranscriptService $transcripts */
+$transcripts = app(SessionTranscriptService::class);
+
+$events = $transcripts->fullTranscript('codex', 'thread-123');
+$todos = $transcripts->todoList('codex', 'thread-123');
+$turns = $transcripts->turns('codex', 'thread-123');
+$usage = $transcripts->usageTotals('codex', 'thread-123'); // sums input/output/cached across turns
+```
 
 ## Configuration
 

@@ -6,6 +6,8 @@ namespace Atlas\Agent\Providers;
 
 use Atlas\Agent\Console\Commands\RunCodexSessionCommand;
 use Atlas\Agent\Services\CodexCliSessionService;
+use Atlas\Agent\Services\SessionTranscripts\CodexSessionTranscriptParser;
+use Atlas\Agent\Services\SessionTranscripts\SessionTranscriptService;
 use Atlas\Core\Providers\PackageServiceProvider;
 
 /**
@@ -31,6 +33,14 @@ class AgentCliServiceProvider extends PackageServiceProvider
             $workspacePath = is_string($workspacePath) ? $workspacePath : null;
 
             return new CodexCliSessionService($sessionsPath, $workspacePath);
+        });
+
+        $this->app->singleton(SessionTranscriptService::class, function (): SessionTranscriptService {
+            $sessionsBasePath = (string) config('atlas-agent-cli.sessions.path', storage_path('app/sessions'));
+
+            return new SessionTranscriptService($sessionsBasePath, [
+                new CodexSessionTranscriptParser,
+            ]);
         });
     }
 
