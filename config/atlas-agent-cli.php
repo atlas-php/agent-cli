@@ -14,7 +14,7 @@ return [
     |
     */
     'sessions' => [
-        'path' => env('ATLAS_AGENT_CLI_SESSION_PATH', storage_path('app/sessions')),
+        'path' => storage_path('app/sessions'),
     ],
 
     /*
@@ -28,53 +28,25 @@ return [
     |
     */
     'workspace' => [
-        'path' => env('ATLAS_AGENT_CLI_WORKSPACE_PATH', base_path()),
+        'path' => base_path(),
     ],
 
     /*
-    |--------------------------------------------------------------------------
-    | Default Codex Runtime Options
-    |--------------------------------------------------------------------------
-    |
-    | Control which model each provider should use whenever the `codex:session`
-    | command forwards requests. Values are keyed by provider so you can set
-    | defaults for multiple providers. Each value may be overridden per
-    | invocation through the command's --model option or by explicitly passing
-    | Codex CLI flags via args.
-    |
-    | Supported options today: gpt-5.1-codex-max, gpt-5.1-codex, gpt-5.1-codex-mini.
-    |
-    */
-    'model' => [
-        'codex' => env('ATLAS_AGENT_CLI_MODEL_CODEX', 'gpt-5.1-codex-max'),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Codex Reasoning Strategy
-    |--------------------------------------------------------------------------
-    |
-    | Choose the reasoning mode Codex should apply for each provider. Set this
-    | to a supported value such as "medium" or "deep" to match the selected
-    | Codex model. The --reasoning option overrides this per invocation.
-    |
-    */
-    'reasoning' => [
-        'codex' => env('ATLAS_AGENT_CLI_REASONING_CODEX', 'medium'),
-    ],
-
-    /*
-    |--------------------------------------------------------------------------
-    | Codex Approval Policy
-    |--------------------------------------------------------------------------
-    |
-    | Control when Codex pauses for approval before executing commands. Valid
-    | values: untrusted, on-failure, on-request, never. The --approval option
-    | overrides this per invocation.
-    |
-    */
-    'approval' => [
-        'codex' => env('ATLAS_AGENT_CLI_APPROVAL_CODEX', 'never'),
+     |--------------------------------------------------------------------------
+     | Provider Defaults
+     |--------------------------------------------------------------------------
+     |
+     | Configure defaults per provider so the Codex CLI receives the right model,
+     | reasoning mode, and approval policy on every run unless explicitly
+     | overridden via command options or raw CLI flags.
+     |
+     */
+    'providers' => [
+        'codex' => [
+            'model' => 'gpt-5.1-codex-max',
+            'reasoning' => 'medium',
+            'approval' => 'never',
+        ],
     ],
 
     /*

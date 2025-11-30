@@ -168,13 +168,13 @@ class RunCodexSessionCommand extends Command
             return $option;
         }
 
-        $configured = config('atlas-agent-cli.model.'.self::PROVIDER);
+        $configured = config('atlas-agent-cli.providers.'.self::PROVIDER.'.model');
 
         if (! is_string($configured)) {
-            $configured = config('atlas-agent-cli.model');
+            $providers = config('atlas-agent-cli.providers');
 
-            if (is_array($configured)) {
-                $configured = $configured[self::PROVIDER] ?? null;
+            if (is_array($providers)) {
+                $configured = $providers[self::PROVIDER]['model'] ?? null;
             }
         }
 
@@ -194,13 +194,13 @@ class RunCodexSessionCommand extends Command
             return $option;
         }
 
-        $configured = config('atlas-agent-cli.reasoning.'.self::PROVIDER);
+        $configured = config('atlas-agent-cli.providers.'.self::PROVIDER.'.reasoning');
 
         if (! is_string($configured)) {
-            $configured = config('atlas-agent-cli.reasoning');
+            $providers = config('atlas-agent-cli.providers');
 
-            if (is_array($configured)) {
-                $configured = $configured[self::PROVIDER] ?? null;
+            if (is_array($providers)) {
+                $configured = $providers[self::PROVIDER]['reasoning'] ?? null;
             }
         }
 
@@ -220,13 +220,13 @@ class RunCodexSessionCommand extends Command
             return $option;
         }
 
-        $configured = config('atlas-agent-cli.approval.'.self::PROVIDER);
+        $configured = config('atlas-agent-cli.providers.'.self::PROVIDER.'.approval');
 
         if (! is_string($configured)) {
-            $configured = config('atlas-agent-cli.approval');
+            $providers = config('atlas-agent-cli.providers');
 
-            if (is_array($configured)) {
-                $configured = $configured[self::PROVIDER] ?? null;
+            if (is_array($providers)) {
+                $configured = $providers[self::PROVIDER]['approval'] ?? null;
             }
         }
 

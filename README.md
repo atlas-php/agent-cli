@@ -100,10 +100,8 @@ php sandbox/artisan codex:session --workspace="/Users/marois/Development/Atlasph
 The `config/atlas-agent-cli.php` file exposes:
 
 * `sessions.path` – base directory for JSONL transcripts. Atlas Agent CLI stores Codex logs inside `<path>/codex`. Defaults to `storage/app/sessions`.
-* `workspace.path` – the working directory Codex should execute within. Defaults to your Laravel application's base path but can be pointed at any detached workspace (override via `ATLAS_AGENT_CLI_WORKSPACE_PATH` or the `--workspace` command option for per-run overrides).
-* `model.<provider>` – default model applied per provider unless overridden with `--model`. Codex defaults to `model.codex = gpt-5.1-codex-max` (set via `ATLAS_AGENT_CLI_MODEL_CODEX`). Available models are listed at [OpenAI Codex models](https://developers.openai.com/codex/models).
-* `reasoning.<provider>` – default reasoning strategy applied per provider unless overridden with `--reasoning`. Codex defaults to `reasoning.codex = medium` (set via `ATLAS_AGENT_CLI_REASONING_CODEX`) so reasoning-friendly models receive the right hint by default.
-* `approval.<provider>` – default approval policy applied per provider unless overridden with `--approval`. Codex defaults to `approval.codex = never` (set via `ATLAS_AGENT_CLI_APPROVAL_CODEX`).
+* `workspace.path` – the working directory Codex should execute within. Defaults to your Laravel application's base path but can be pointed at any detached workspace (override via the `--workspace` command option for per-run overrides).
+* `providers.codex.model` / `providers.codex.reasoning` / `providers.codex.approval` – default Codex runtime options applied unless overridden via `--model`, `--reasoning`, or `--approval`. Defaults: model `gpt-5.1-codex-max`, reasoning `medium`, approval `never`.
 * `template.task` / `template.instructions` – string templates (defaults to `Task: {TASK}` and `Instructions: {INSTRUCTIONS}`) that shape how the task and instructions are combined before forwarding them to Codex. Workspace logs record the templates, and thread request/resume entries include the rendered messages (instructions first, then task) so you can see exactly what Codex receives.
 
 ## Local Sandbox
