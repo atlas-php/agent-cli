@@ -20,7 +20,7 @@ class RunCodexSessionCommand extends Command
     /**
      * @var string
      */
-    protected $signature = 'codex:session
+    protected $signature = 'agent:codex
         {args?* : Arguments to pass to the Codex CLI}
         {--interactive : Run Codex attached to your terminal without logging}
         {--model= : Override the Codex model for this run}
@@ -41,6 +41,8 @@ class RunCodexSessionCommand extends Command
 
     private CodexCliSessionService $sessionService;
 
+    private string $lastUsageLine = '';
+
     public function __construct(CodexCliSessionService $sessionService)
     {
         parent::__construct();
@@ -52,6 +54,7 @@ class RunCodexSessionCommand extends Command
         /** @var mixed $rawArguments */
         $rawArguments = $this->argument('args');
         $arguments = [];
+        $this->lastUsageLine = '';
 
         if (is_array($rawArguments)) {
             foreach ($rawArguments as $argument) {
@@ -103,6 +106,11 @@ class RunCodexSessionCommand extends Command
             $this->error('Codex session failed: '.$exception->getMessage());
 
             return self::FAILURE;
+        }
+
+        // @phpstan-ignore-next-line The usage line is populated during streamed output.
+        if ($this->lastUsageLine !== '') {
+            $this->info($this->lastUsageLine);
         }
 
         $this->newLine();
@@ -398,8 +406,15 @@ class RunCodexSessionCommand extends Command
             ));
 
             foreach ($lines as $line) {
-                if ($type === Process::OUT && str_starts_with($line, 'exit code: ')) {
-                    $exitCode = (int) substr($line, 11);
+                if (str_contains($line, 'tokens used:')) {
+                    $this->lastUsageLine = $line;
+
+                    continue;
+                }
+
+                if ($type === Process::OUT && str_contains($line, '(exit code ')) {
+                    preg_match('/\\(exit code\\s+(-?\\d+)\\)/', $line, $matches);
+                    $exitCode = isset($matches[1]) ? (int) $matches[1] : 0;
                     if ($exitCode !== 0) {
                         $this->error($line);
 
@@ -413,7 +428,11 @@ class RunCodexSessionCommand extends Command
                     continue;
                 }
 
-                $this->info($line);
+                if (str_starts_with($line, '- session started') || str_starts_with($line, '- session completed')) {
+                    $this->info($line);
+                } else {
+                    $this->line($line);
+                }
             }
         };
     }

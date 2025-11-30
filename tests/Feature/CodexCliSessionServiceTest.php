@@ -31,6 +31,7 @@ final class CodexCliSessionServiceTest extends TestCase
             ['type' => 'thread.started', 'thread_id' => 'thread-123'],
             ['type' => 'item.started', 'item' => ['type' => 'command_execution', 'command' => 'ls -la', 'id' => 'item-1']],
             ['type' => 'item.completed', 'item' => ['type' => 'command_execution', 'id' => 'item-1', 'aggregated_output' => "output\r\nline", 'exit_code' => 0]],
+            ['type' => 'item.completed', 'item' => ['type' => 'agent_message', 'text' => '- Verified all checks: composer lint']],
             ['type' => 'turn.completed', 'usage' => ['input_tokens' => 1200, 'output_tokens' => 345]],
         ];
 
@@ -97,10 +98,12 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertSame('Task: tasks:list', $firstEvent['task'] ?? null);
         $this->assertArrayNotHasKey('instructions', $firstEvent);
 
-        $this->assertStringContainsString('session started', $output);
-        $this->assertStringContainsString('running command', $output);
-        $this->assertStringContainsString('command finished', $output);
-        $this->assertStringContainsString('tokens used', $output);
+        $this->assertStringContainsString('- session started: thread-123', $output);
+        $this->assertStringContainsString('- command running', $output);
+        $this->assertStringContainsString('- command finished (exit code 0)', $output);
+        $this->assertStringContainsString('- agent: Verified all checks: composer lint', $output);
+        $this->assertStringNotContainsString('- agent: - Verified all checks: composer lint', $output);
+        $this->assertStringContainsString('tokens used: input=1,200, output=345', $output);
         $this->assertStringNotContainsString("output\nline", $output);
     }
 

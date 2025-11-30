@@ -19,7 +19,7 @@ final class RunCodexSessionCommandTest extends TestCase
     public function test_command_fails_when_no_arguments_provided(): void
     {
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session');
+        $command = $this->artisan('agent:codex');
         $command
             ->expectsOutput('You must provide arguments for the Codex CLI.')
             ->assertExitCode(Command::FAILURE);
@@ -45,7 +45,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', ['args' => ['tasks:list']]);
+        $command = $this->artisan('agent:codex', ['args' => ['tasks:list']]);
         $command
             ->expectsOutput('Codex session completed.')
             ->expectsOutput('Session ID: thread-xyz')
@@ -70,7 +70,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', ['args' => ['tasks:list']]);
+        $command = $this->artisan('agent:codex', ['args' => ['tasks:list']]);
         $command
             ->expectsOutput('Codex session failed: bad run')
             ->assertExitCode(Command::FAILURE);
@@ -96,7 +96,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', [
+        $command = $this->artisan('agent:codex', [
             'args' => ['tasks:list'],
             '--model' => 'o1-mini',
         ]);
@@ -125,7 +125,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', [
+        $command = $this->artisan('agent:codex', [
             'args' => ['tasks:list'],
             '--approval' => 'on-request',
         ]);
@@ -154,7 +154,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', [
+        $command = $this->artisan('agent:codex', [
             'args' => ['tasks:list'],
             '--reasoning' => 'deep',
         ]);
@@ -183,7 +183,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', ['args' => ['tasks:list', '--plan']]);
+        $command = $this->artisan('agent:codex', ['args' => ['tasks:list', '--plan']]);
         $command->assertExitCode(Command::SUCCESS);
     }
 
@@ -207,7 +207,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', [
+        $command = $this->artisan('agent:codex', [
             'args' => ['tasks:list'],
             '--workspace' => '/tmp/codex-workspace',
         ]);
@@ -234,7 +234,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', [
+        $command = $this->artisan('agent:codex', [
             'args' => ['tasks:list'],
             '--instructions' => 'Follow the handbook',
         ]);
@@ -274,7 +274,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', [
+        $command = $this->artisan('agent:codex', [
             'args' => ['tasks:list'],
             '--template-task' => 'Task: {TASK} [override]',
             '--template-instructions' => 'Instructions: {INSTRUCTIONS} [override]',
@@ -302,7 +302,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', [
+        $command = $this->artisan('agent:codex', [
             'args' => ['tasks:list'],
             '--meta' => '{"assistant_id":"assistant-1"}',
         ]);
@@ -314,7 +314,7 @@ final class RunCodexSessionCommandTest extends TestCase
         config()->set('atlas-agent-cli.providers.codex.model', null);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', [
+        $command = $this->artisan('agent:codex', [
             'args' => ['tasks:list'],
             '--meta' => '{invalid',
         ]);
@@ -343,7 +343,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $this->app->instance(CodexCliSessionService::class, $mockService);
 
         /** @var \Illuminate\Testing\PendingCommand $command */
-        $command = $this->artisan('codex:session', [
+        $command = $this->artisan('agent:codex', [
             'args' => ['tasks:list'],
             '--resume' => 'thread-123',
         ]);

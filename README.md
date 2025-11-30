@@ -40,7 +40,7 @@ Atlas\Agent\Providers\AgentCliServiceProvider::class,
 The command mirrors the raw `codex` CLI but adds streaming and JSON logging:
 
 ```bash
-php artisan codex:session -- tasks:list --plan
+php artisan agent:codex -- tasks:list --plan
 ```
 
 Options:
@@ -94,7 +94,7 @@ Publish the configuration file to customize session storage and Codex defaults:
 ```bash
 php artisan vendor:publish --tag=atlas-agent-cli-config
 
-php sandbox/artisan codex:session --workspace="/Users/marois/Development/Atlasphp/Repo/agent-cli" "say hello"
+php sandbox/artisan agent:codex --workspace="/Users/marois/Development/Atlasphp/Repo/agent-cli" "say hello"
 ```
 
 The `config/atlas-agent-cli.php` file exposes:
@@ -106,10 +106,10 @@ The `config/atlas-agent-cli.php` file exposes:
 
 ## Local Sandbox
 
-The repository ships with a minimal Laravel sandbox so you can run the `codex:session` command without installing the package into a real application. The sandbox has no database and only registers the Agent CLI service provider.
+The repository ships with a minimal Laravel sandbox so you can run the `agent:codex` command without installing the package into a real application. The sandbox has no database and only registers the Agent CLI service provider.
 
 ```bash
-php sandbox/artisan codex:session -- tasks:list --plan
+php sandbox/artisan agent:codex -- tasks:list --plan
 ```
 
 JSON transcripts are stored inside `sandbox/storage/app/sessions/codex`. Pass `--interactive` to talk directly to Codex without log files.

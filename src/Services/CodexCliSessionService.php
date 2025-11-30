@@ -224,9 +224,7 @@ class CodexCliSessionService
                 $codexSessionId = $generatedSessionId;
             }
 
-            if ($codexSessionId !== null && $codexSessionId !== '') {
-                $this->ensureJsonLogHandle($codexSessionId, $jsonLog);
-            }
+            $this->ensureJsonLogHandle($codexSessionId, $jsonLog);
 
             if (is_resource($jsonLog['handle'])) {
                 fclose($jsonLog['handle']);
@@ -361,12 +359,14 @@ class CodexCliSessionService
         }
 
         $jsonLog['path'] = $this->prepareJsonLogFile($sessionId);
-        $jsonLog['handle'] = fopen($jsonLog['path'], 'ab');
+        $handle = fopen($jsonLog['path'], 'ab');
 
-        if ($jsonLog['handle'] === false) {
+        if ($handle === false) {
             $jsonLog['handle'] = null;
             throw new RuntimeException('Unable to open JSON log file for writing: '.$jsonLog['path']);
         }
+
+        $jsonLog['handle'] = $handle;
 
         foreach ($jsonLog['buffer'] as $bufferedLine) {
             fwrite($jsonLog['handle'], $bufferedLine."\n");
@@ -1234,8 +1234,7 @@ class CodexCliSessionService
                 }
 
                 return $this->formatLines([
-                    'session started',
-                    $codexSessionId !== null ? 'session id: '.$codexSessionId : null,
+                    $codexSessionId !== null ? 'session started: '.$codexSessionId : 'session started',
                 ]);
 
             case 'workspace':
@@ -1301,15 +1300,15 @@ class CodexCliSessionService
      */
     private function renderReasoningItem(array $item): ?string
     {
-        $text = trim((string) ($item['text'] ?? ''));
+        $text = $this->normalizeDisplayText((string) ($item['text'] ?? ''));
 
         if ($text === '') {
             return null;
         }
 
         return $this->formatLines([
-            'reasoning',
-            $text,
+            'agent: '.$text,
+            str_repeat('-', 40),
         ]);
     }
 
@@ -1318,15 +1317,15 @@ class CodexCliSessionService
      */
     private function renderAgentMessageItem(array $item): ?string
     {
-        $text = trim((string) ($item['text'] ?? ''));
+        $text = $this->normalizeDisplayText((string) ($item['text'] ?? ''));
 
         if ($text === '') {
             return null;
         }
 
         return $this->formatLines([
-            'agent message',
-            $text,
+            'agent: '.$text,
+            str_repeat('-', 40),
         ]);
     }
 
@@ -1361,8 +1360,7 @@ class CodexCliSessionService
             }
 
             return $this->formatLines([
-                'running command',
-                $command !== '' ? $command : null,
+                'command running',
             ]);
         }
 
@@ -1379,13 +1377,12 @@ class CodexCliSessionService
         $lines = [];
 
         if ($phase === 'completed') {
-            $lines[] = $command !== '' ? 'command finished: '.$command : 'command finished';
-
+            $summary = 'command finished';
             if ($exitCode !== null) {
-                $lines[] = 'exit code: '.$exitCode;
+                $summary .= ' (exit code '.$exitCode.')';
             }
 
-            return $this->formatLines($lines);
+            return $this->formatLines([$summary]);
         }
 
         return null;
@@ -1400,8 +1397,7 @@ class CodexCliSessionService
         $label = $phase === 'completed' ? 'edited file' : 'editing file';
 
         return $this->formatLines([
-            $label,
-            $path !== '' ? $path : null,
+            $path !== '' ? $label.': '.$path : $label,
         ]);
     }
 
@@ -1418,21 +1414,34 @@ class CodexCliSessionService
         $cached = $usage['cached_input_tokens'] ?? null;
         $output = $usage['output_tokens'] ?? null;
 
-        $lines = ['tokens used'];
+        $parts = [];
 
         if ($input !== null) {
-            $line = 'input: '.number_format((int) $input);
+            $part = 'input='.number_format((int) $input);
             if ($cached !== null) {
-                $line .= ' (cached: '.number_format((int) $cached).')';
+                $part .= ' (cached '.number_format((int) $cached).')';
             }
-            $lines[] = $line;
+            $parts[] = $part;
         }
 
         if ($output !== null) {
-            $lines[] = 'output: '.number_format((int) $output);
+            $parts[] = 'output='.number_format((int) $output);
         }
 
-        return $this->formatLines($lines);
+        if ($parts === []) {
+            return null;
+        }
+
+        return 'tokens used: '.implode(', ', $parts)."\n";
+    }
+
+    private function normalizeDisplayText(string $text): string
+    {
+        $stripped = str_replace(["\r", "\n"], ' ', $text);
+        $collapsed = preg_replace('/\s+/', ' ', $stripped) ?? '';
+        $collapsed = preg_replace('/^-\s+/', '', $collapsed) ?? $collapsed;
+
+        return trim($collapsed);
     }
 
     /**
@@ -1448,7 +1457,9 @@ class CodexCliSessionService
             return null;
         }
 
-        return implode("\n", $filtered)."\n";
+        $bulleted = array_map(static fn (string $line): string => '- '.$line, $filtered);
+
+        return implode("\n", $bulleted)."\n";
     }
 
     protected function streamToTerminal(string $type, string $cleanBuffer): void
