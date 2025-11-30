@@ -51,6 +51,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Codex Reasoning Strategy
+    |--------------------------------------------------------------------------
+    |
+    | Choose the reasoning mode Codex should apply for each provider. Set this
+    | to a supported value such as "medium" or "deep" to match the selected
+    | Codex model. The --reasoning option overrides this per invocation.
+    |
+    */
+    'reasoning' => [
+        'codex' => env('ATLAS_AGENT_CLI_REASONING_CODEX', 'medium'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Task and Instruction Format
     |--------------------------------------------------------------------------
     |

@@ -23,6 +23,7 @@ class RunCodexSessionCommand extends Command
         {args?* : Arguments to pass to the Codex CLI}
         {--interactive : Run Codex attached to your terminal without logging}
         {--model= : Override the Codex model for this run}
+        {--reasoning= : Control the Codex reasoning strategy for this run}
         {--instructions= : Additional system instructions appended ahead of the user task}
         {--template-task= : Template used to render the task payload for this run}
         {--template-instructions= : Template used to render the instructions payload for this run}
@@ -122,6 +123,11 @@ class RunCodexSessionCommand extends Command
             $injected[] = '--model='.$model;
         }
 
+        $reasoning = $this->resolveReasoningOption();
+        if ($reasoning !== null && $this->shouldInjectFlag($arguments, '--reasoning')) {
+            $injected[] = '--reasoning='.$reasoning;
+        }
+
         if ($injected === []) {
             return $arguments;
         }
@@ -160,6 +166,32 @@ class RunCodexSessionCommand extends Command
 
         if (! is_string($configured)) {
             $configured = config('atlas-agent-cli.model');
+
+            if (is_array($configured)) {
+                $configured = $configured[self::PROVIDER] ?? null;
+            }
+        }
+
+        $configured = is_string($configured) ? trim($configured) : $configured;
+
+        return is_string($configured) && $configured !== '' ? $configured : null;
+    }
+
+    private function resolveReasoningOption(): ?string
+    {
+        $option = $this->option('reasoning');
+        if (is_string($option)) {
+            $option = trim($option);
+        }
+
+        if (is_string($option) && $option !== '') {
+            return $option;
+        }
+
+        $configured = config('atlas-agent-cli.reasoning.'.self::PROVIDER);
+
+        if (! is_string($configured)) {
+            $configured = config('atlas-agent-cli.reasoning');
 
             if (is_array($configured)) {
                 $configured = $configured[self::PROVIDER] ?? null;

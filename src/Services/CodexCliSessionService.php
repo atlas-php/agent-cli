@@ -348,6 +348,7 @@ class CodexCliSessionService
         $resolvedWorkspace = realpath($workspacePath) ?: $workspacePath;
         $platformPath = $this->resolvePlatformBasePath();
         $model = $this->determineModelFromArguments($arguments);
+        $reasoning = $this->determineReasoningFromArguments($arguments);
 
         $event = [
             'type' => 'workspace',
@@ -362,6 +363,10 @@ class CodexCliSessionService
 
         if ($model !== null) {
             $event['model'] = $model;
+        }
+
+        if ($reasoning !== null) {
+            $event['reasoning'] = $reasoning;
         }
 
         $event = $this->maybeAttachTaskFormat(
@@ -431,6 +436,45 @@ class CodexCliSessionService
     }
 
     /**
+     * @param  array<int, string>  $arguments
+     */
+    private function determineReasoningFromArguments(array $arguments): ?string
+    {
+        $argumentCount = count($arguments);
+
+        for ($index = 0; $index < $argumentCount; $index++) {
+            $argument = $arguments[$index];
+
+            if ($argument === '') {
+                continue;
+            }
+
+            if (str_starts_with($argument, '--reasoning=')) {
+                $value = substr($argument, 12);
+
+                return $value !== '' ? $value : null;
+            }
+
+            if ($argument !== '--reasoning') {
+                continue;
+            }
+
+            $next = $arguments[$index + 1] ?? null;
+
+            if (is_string($next)) {
+                $value = trim($next);
+
+                if ($value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array{task?: string|null, instructions?: string|null}|null  $overrides
      * @return array{task: string|null, instructions: string|null}
      */
     private function resolveTaskFormatTemplates(?array $overrides = null): array
@@ -1008,6 +1052,7 @@ class CodexCliSessionService
                     isset($event['platform_path']) ? 'platform: '.$event['platform_path'] : null,
                     isset($event['session_log_path']) ? 'logs: '.$event['session_log_path'] : null,
                     isset($event['model']) ? 'model: '.$event['model'] : null,
+                    isset($event['reasoning']) ? 'reasoning: '.$event['reasoning'] : null,
                     isset($event['template_task']) ? 'template (task): '.$event['template_task'] : null,
                     isset($event['template_instructions']) ? 'template (instructions): '.$event['template_instructions'] : null,
                     isset($event['instructions_rendered']) ? 'instructions rendered: '.$event['instructions_rendered'] : null,
