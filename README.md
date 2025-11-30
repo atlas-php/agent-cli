@@ -49,6 +49,7 @@ Options:
 * `--interactive` – run Codex directly attached to your terminal (no JSON logging).
 * `--model=` – override the Codex model for the current run.
 * `--instructions=` – prepend additional system instructions ahead of the user task; stored in the JSON log as a `thread.request` event.
+* `--template-task=` / `--template-instructions=` – override the configured task/instructions templates for a single run when you want to reshape the payload without editing config.
 * `--meta=` – supply a JSON object of metadata (IDs, tags, etc.) that is recorded alongside the synthetic thread lifecycle log entry.
 * `--resume=` – continue an existing Codex thread; the wrapper preserves the thread identifier, writes a `thread.resumed` log entry for the new task, and still forwards only your task arguments to Codex.
 * `--workspace=` – override the working directory Codex uses for this run (falls back to the configured workspace when omitted). The command executes Codex from this path and logs it inside the `workspace` JSONL entry alongside the provider name.
@@ -80,7 +81,7 @@ $result = app(CodexCliSessionService::class)->startSession([
 
 The service handles both interactive and headless runs, automatically sanitizes ANSI escape sequences, streams events to STDOUT/STDERR, and records every Codex JSON event to a JSON Lines log.
 
-When invoking the service directly you may pass a workspace override as the final argument (`startSession($args, $interactive, ..., $workspaceOverride)`), mirroring the `--workspace` console option.
+When invoking the service directly you may pass a workspace override and optional task/instruction templates as the final arguments (`startSession($args, $interactive, ..., $workspaceOverride, $templates)`), mirroring the `--workspace` and `--template-*` console options.
 
 Each headless log now begins with a `workspace` entry that captures the provider (`codex`), the Codex workspace path, the platform path, the JSONL log directory, and the effective model for the run. This is followed by the synthetic `thread.request` (or `thread.resumed`) entry summarizing system instructions, the triggering task, and any metadata supplied via `--meta`, so downstream tooling can reconstruct the full prompt context. When resuming a thread via `--resume`, the log still records a `thread.resumed` entry containing the latest user task (plus metadata) without re-stating the original instructions.
 

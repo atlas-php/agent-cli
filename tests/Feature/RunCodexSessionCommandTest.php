@@ -33,7 +33,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=gpt-5.1-codex-max', 'tasks:list'], false, 'tasks:list', null, null, null, null)
+            ->with(['--model=gpt-5.1-codex-max', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -60,7 +60,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['tasks:list'], false, 'tasks:list', null, null, null, null)
+            ->with(['tasks:list'], false, 'tasks:list', null, null, null, null, null)
             ->andThrow(new \RuntimeException('bad run'));
 
         $this->app->instance(CodexCliSessionService::class, $mockService);
@@ -80,7 +80,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=o1-mini', 'tasks:list'], false, 'tasks:list', null, null, null, null)
+            ->with(['--model=o1-mini', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -107,7 +107,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['tasks:list', '--plan'], false, 'tasks:list --plan', null, null, null, null)
+            ->with(['tasks:list', '--plan'], false, 'tasks:list --plan', null, null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -129,7 +129,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['tasks:list'], false, 'tasks:list', null, null, null, '/tmp/codex-workspace')
+            ->with(['tasks:list'], false, 'tasks:list', null, null, null, '/tmp/codex-workspace', null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -154,7 +154,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['tasks:list'], false, 'tasks:list', 'Follow the handbook', null, null, null)
+            ->with(['tasks:list'], false, 'tasks:list', 'Follow the handbook', null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -171,6 +171,44 @@ final class RunCodexSessionCommandTest extends TestCase
         $command->assertExitCode(Command::SUCCESS);
     }
 
+    public function test_command_forwards_template_options(): void
+    {
+        config()->set('atlas-agent-cli.model.codex', null);
+
+        /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
+        $mockService = Mockery::mock(CodexCliSessionService::class);
+        $this->mockExpectation($mockService, 'startSession')
+            ->once()
+            ->with(
+                ['tasks:list'],
+                false,
+                'tasks:list',
+                null,
+                null,
+                null,
+                null,
+                [
+                    'task' => 'Task: {TASK} [override]',
+                    'instructions' => 'Instructions: {INSTRUCTIONS} [override]',
+                ]
+            )
+            ->andReturn([
+                'session_id' => 'thread-xyz',
+                'json_file_path' => '/tmp/thread-xyz.jsonl',
+                'exit_code' => 0,
+            ]);
+
+        $this->app->instance(CodexCliSessionService::class, $mockService);
+
+        /** @var \Illuminate\Testing\PendingCommand $command */
+        $command = $this->artisan('codex:session', [
+            'args' => ['tasks:list'],
+            '--template-task' => 'Task: {TASK} [override]',
+            '--template-instructions' => 'Instructions: {INSTRUCTIONS} [override]',
+        ]);
+        $command->assertExitCode(Command::SUCCESS);
+    }
+
     public function test_command_forwards_meta_option(): void
     {
         config()->set('atlas-agent-cli.model.codex', null);
@@ -179,7 +217,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['tasks:list'], false, 'tasks:list', null, ['assistant_id' => 'assistant-1'], null, null)
+            ->with(['tasks:list'], false, 'tasks:list', null, ['assistant_id' => 'assistant-1'], null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -218,7 +256,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['tasks:list'], false, 'tasks:list', null, null, 'thread-123', null)
+            ->with(['tasks:list'], false, 'tasks:list', null, null, 'thread-123', null, null)
             ->andReturn([
                 'session_id' => 'thread-123',
                 'json_file_path' => '/tmp/thread-123.jsonl',

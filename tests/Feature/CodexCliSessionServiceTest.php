@@ -376,6 +376,89 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertSame('Follow the handbook', $threadRequest['instructions'] ?? null);
     }
 
+    public function test_task_format_template_passed_to_service_overrides_config(): void
+    {
+        $this->cleanCodexDirectory();
+
+        config()->set('atlas-agent-cli.template.task', 'Config Task: {TASK}');
+        config()->set('atlas-agent-cli.template.instructions', 'Config Instructions: {INSTRUCTIONS}');
+
+        $workspacePath = $this->workspacePath();
+        $service = new TestCodexCliSessionService(null, $workspacePath);
+        /** @var Process&\Mockery\MockInterface $process */
+        $process = Mockery::mock(Process::class);
+
+        $events = [
+            ['type' => 'thread.started', 'thread_id' => 'thread-custom-template'],
+            ['type' => 'turn.completed', 'usage' => ['input_tokens' => 5, 'output_tokens' => 10]],
+        ];
+
+        $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')->once()->with($workspacePath)->andReturnSelf();
+        $this->mockExpectation($process, 'run')
+            ->once()
+            ->andReturnUsing(function (callable $callback) use ($events): int {
+                foreach ($events as $event) {
+                    $callback(Process::OUT, json_encode($event)."\n");
+                }
+
+                return 0;
+            });
+        $this->mockExpectation($process, 'isSuccessful')->once()->andReturn(true);
+        $this->mockExpectation($process, 'getExitCode')->once()->andReturn(0);
+
+        $service->headlessProcess = $process;
+
+        $service->startSession(
+            ['tasks:list'],
+            false,
+            'review changes',
+            'Apply the template override',
+            null,
+            null,
+            null,
+            [
+                'task' => 'Custom Task: {TASK}',
+                'instructions' => 'Custom Instructions: {INSTRUCTIONS}',
+            ]
+        );
+
+        $expectedDirectory = $this->codexSessionsDirectory();
+        $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-custom-template.jsonl';
+        $this->assertFileExists($expectedPath);
+
+        $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
+
+        $workspaceEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($workspaceEvent);
+        $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
+        $this->assertSame('Custom Task: {TASK}', $workspaceEvent['template_task'] ?? null);
+        $this->assertSame('Custom Instructions: {INSTRUCTIONS}', $workspaceEvent['template_instructions'] ?? null);
+        $this->assertArrayNotHasKey('task_rendered', $workspaceEvent);
+        $this->assertArrayNotHasKey('instructions_rendered', $workspaceEvent);
+        $this->assertArrayNotHasKey('full_message_rendered', $workspaceEvent);
+
+        $threadRequest = json_decode($lines[1] ?? '', true);
+        $this->assertIsArray($threadRequest);
+        $this->assertSame('thread.request', $threadRequest['type'] ?? null);
+        $this->assertSame(
+            "Custom Instructions: Apply the template override\nCustom Task: review changes",
+            $threadRequest['task'] ?? null
+        );
+        $this->assertSame('Custom Task: {TASK}', $threadRequest['template_task'] ?? null);
+        $this->assertSame('Custom Instructions: {INSTRUCTIONS}', $threadRequest['template_instructions'] ?? null);
+        $this->assertSame('Custom Task: review changes', $threadRequest['task_rendered'] ?? null);
+        $this->assertSame(
+            'Custom Instructions: Apply the template override',
+            $threadRequest['instructions_rendered'] ?? null
+        );
+        $this->assertSame(
+            "Custom Instructions: Apply the template override\nCustom Task: review changes",
+            $threadRequest['full_message_rendered'] ?? null
+        );
+    }
+
     public function test_thread_request_event_includes_custom_metadata_only_in_log(): void
     {
         $this->cleanCodexDirectory();

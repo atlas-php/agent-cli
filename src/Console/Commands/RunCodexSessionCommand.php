@@ -24,6 +24,8 @@ class RunCodexSessionCommand extends Command
         {--interactive : Run Codex attached to your terminal without logging}
         {--model= : Override the Codex model for this run}
         {--instructions= : Additional system instructions appended ahead of the user task}
+        {--template-task= : Template used to render the task payload for this run}
+        {--template-instructions= : Template used to render the instructions payload for this run}
         {--meta= : JSON object of metadata stored on the synthetic thread lifecycle log entry}
         {--resume= : Resume an existing Codex thread by identifier}
         {--workspace= : Absolute path Codex should treat as its working directory for this run}
@@ -79,6 +81,7 @@ class RunCodexSessionCommand extends Command
         $resumeThreadId = $this->resolveResumeOption();
         $arguments = $this->injectRuntimeOptions($arguments);
         $interactive = (bool) $this->option('interactive');
+        $taskFormatTemplates = $this->resolveTemplateOptions();
 
         try {
             $result = $this->sessionService->startSession(
@@ -88,7 +91,8 @@ class RunCodexSessionCommand extends Command
                 $systemInstructions,
                 $threadRequestMeta,
                 $resumeThreadId,
-                $workspaceOverride
+                $workspaceOverride,
+                $taskFormatTemplates
             );
         } catch (\Throwable $exception) {
             $this->error('Codex session failed: '.$exception->getMessage());
@@ -175,6 +179,24 @@ class RunCodexSessionCommand extends Command
         }
 
         return is_string($option) && $option !== '' ? $option : null;
+    }
+
+    /**
+     * @return array{task?: string|null, instructions?: string|null}|null
+     */
+    private function resolveTemplateOptions(): ?array
+    {
+        $taskTemplate = $this->option('template-task');
+        $instructionsTemplate = $this->option('template-instructions');
+
+        $templates = [
+            'task' => is_string($taskTemplate) ? trim($taskTemplate) : null,
+            'instructions' => is_string($instructionsTemplate) ? trim($instructionsTemplate) : null,
+        ];
+
+        $templates = array_filter($templates, static fn (?string $value): bool => is_string($value) && $value !== '');
+
+        return $templates !== [] ? $templates : null;
     }
 
     /**

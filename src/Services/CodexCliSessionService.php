@@ -32,6 +32,7 @@ class CodexCliSessionService
     /**
      * @param  array<int, string>  $arguments
      * @param  array<string, mixed>|null  $threadRequestMeta
+     * @param  array{task?: string|null, instructions?: string|null}|null  $taskFormatTemplates
      * @return array{session_id: string, json_file_path: string|null, exit_code: int|null}
      */
     public function startSession(
@@ -41,7 +42,8 @@ class CodexCliSessionService
         ?string $systemInstructions = null,
         ?array $threadRequestMeta = null,
         ?string $resumeThreadId = null,
-        ?string $workspaceOverride = null
+        ?string $workspaceOverride = null,
+        ?array $taskFormatTemplates = null
     ): array {
         $sessionId = $resumeThreadId !== null && $resumeThreadId !== ''
             ? $resumeThreadId
@@ -66,7 +68,8 @@ class CodexCliSessionService
             $systemInstructions,
             $threadRequestMeta,
             $resumeThreadId,
-            $workspacePath
+            $workspacePath,
+            $taskFormatTemplates
         );
         $process = $headlessResult['process'];
         $codexSessionId = $headlessResult['codex_session_id'] ?? $sessionId;
@@ -115,6 +118,7 @@ class CodexCliSessionService
     /**
      * @param  array<int, string>  $arguments
      * @param  array<string, mixed>|null  $threadRequestMeta
+     * @param  array{task?: string|null, instructions?: string|null}|null  $taskFormatTemplates
      * @return array{process: Process, codex_session_id: string|null}
      */
     private function runHeadless(
@@ -124,7 +128,8 @@ class CodexCliSessionService
         ?string $systemInstructions,
         ?array $threadRequestMeta,
         ?string $resumeThreadId,
-        ?string $workspacePath
+        ?string $workspacePath,
+        ?array $taskFormatTemplates
     ): array {
         $process = $this->buildProcess($arguments, false, $resumeThreadId);
         $this->prepareProcess($process, $workspacePath);
@@ -139,7 +144,7 @@ class CodexCliSessionService
 
         $jsonBuffer = '';
         $codexSessionId = $resumeThreadId !== null && $resumeThreadId !== '' ? $resumeThreadId : null;
-        $taskFormatTemplates = $this->resolveTaskFormatTemplates();
+        $taskFormatTemplates = $this->resolveTaskFormatTemplates($taskFormatTemplates);
         $trimmedTask = $initialUserInput !== null ? trim($initialUserInput) : null;
         $trimmedInstructions = $systemInstructions !== null ? trim($systemInstructions) : null;
         /**
@@ -428,8 +433,10 @@ class CodexCliSessionService
     /**
      * @return array{task: string|null, instructions: string|null}
      */
-    private function resolveTaskFormatTemplates(): array
+    private function resolveTaskFormatTemplates(?array $overrides = null): array
     {
+        $overrides = is_array($overrides) ? $overrides : [];
+
         $templateConfig = null;
 
         if (function_exists('config')) {
@@ -442,8 +449,20 @@ class CodexCliSessionService
         $taskTemplate = null;
         $instructionsTemplate = null;
 
-        $taskTemplate = is_string($templateConfig['task'] ?? null) ? trim((string) $templateConfig['task']) : null;
-        $instructionsTemplate = is_string($templateConfig['instructions'] ?? null) ? trim((string) $templateConfig['instructions']) : null;
+        $taskTemplate = is_string($overrides['task'] ?? null) ? trim((string) $overrides['task']) : null;
+        $instructionsTemplate = is_string($overrides['instructions'] ?? null)
+            ? trim((string) $overrides['instructions'])
+            : null;
+
+        if ($taskTemplate === null || $taskTemplate === '') {
+            $taskTemplate = is_string($templateConfig['task'] ?? null) ? trim((string) $templateConfig['task']) : null;
+        }
+
+        if ($instructionsTemplate === null || $instructionsTemplate === '') {
+            $instructionsTemplate = is_string($templateConfig['instructions'] ?? null)
+                ? trim((string) $templateConfig['instructions'])
+                : null;
+        }
 
         return [
             'task' => $taskTemplate !== '' ? $taskTemplate : null,
