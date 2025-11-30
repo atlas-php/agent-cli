@@ -86,6 +86,7 @@ The service handles both interactive and headless runs, automatically sanitizes 
 When invoking the service directly you may pass a workspace override and optional task/instruction templates as the final arguments (`startSession($args, $interactive, ..., $workspaceOverride, $templates)`), mirroring the `--workspace` and `--template-*` console options.
 
 Each headless log now begins with a `workspace` entry that captures the provider (`codex`), the Codex workspace path, the platform path, the JSONL log directory, the effective model, the reasoning strategy, and the approval policy for the run. This is followed by the synthetic `thread.request` (or `thread.resumed`) entry summarizing system instructions, the triggering task, and any metadata supplied via `--meta`, so downstream tooling can reconstruct the full prompt context. When resuming a thread via `--resume`, the log still records a `thread.resumed` entry containing the latest user task (plus metadata) without re-stating the original instructions.
+If you abort a headless run with a signal such as `CTRL+C`, the transcript includes a final `thread.terminated` event with the received signal so consumers can see the session ended manually.
 
 ## Configuration
 

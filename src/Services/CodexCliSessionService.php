@@ -28,6 +28,17 @@ class CodexCliSessionService
      */
     private $outputHandler = null;
 
+    private bool $terminationRequested = false;
+
+    private ?int $terminationSignal = null;
+
+    /**
+     * @var array<int, callable|int|string|null>
+     */
+    private array $previousSignalHandlers = [];
+
+    private ?bool $previousAsyncSignalState = null;
+
     public function __construct(?string $sessionDirectory = null, ?string $workspaceDirectory = null)
     {
         $this->sessionDirectory = $sessionDirectory ?? $this->defaultSessionDirectory();
@@ -57,6 +68,7 @@ class CodexCliSessionService
             : (string) Str::uuid();
         $workspacePath = $this->normalizeDirectoryPath($workspaceOverride) ?? $this->workspaceDirectory;
         $this->outputHandler = $outputHandler;
+        $this->resetTerminationState();
 
         try {
             if ($interactive) {
@@ -134,116 +146,128 @@ class CodexCliSessionService
         ?string $workspacePath,
         ?array $taskFormatTemplates
     ): array {
-        $process = $this->buildProcess($arguments, false, $resumeThreadId);
-        $this->prepareProcess($process, $workspacePath);
-        $process->setTimeout(null);
-        $process->setIdleTimeout(null);
-        /**
-         * @var array{path: string|null, handle: resource|null, buffer: array<int, string>} $jsonLog
-         */
-        $jsonLog = [
-            'path' => null,
-            'handle' => null,
-            'buffer' => [],
-        ];
-
-        $jsonBuffer = '';
-        $codexSessionId = $resumeThreadId !== null && $resumeThreadId !== '' ? $resumeThreadId : null;
-        if ($codexSessionId !== null) {
-            $this->ensureJsonLogHandle($codexSessionId, $jsonLog);
-        }
-        $taskFormatTemplates = $this->resolveTaskFormatTemplates($taskFormatTemplates);
-        $trimmedTask = $initialUserInput !== null ? trim($initialUserInput) : null;
-        $trimmedInstructions = $systemInstructions !== null ? trim($systemInstructions) : null;
-        /**
-         * @var array{
-         *     pending_items: array<string, string>,
-         *     initial_user_input: string|null,
-         *     formatted_task: string|null,
-         *     system_instructions: string|null,
-         *     thread_request_logged: bool,
-         *     thread_request_meta: array<string, mixed>,
-         *     resumed_thread_id: string|null,
-         *     workspace_event_logged: bool,
-         *     workspace_event: array<string, mixed>|null,
-         *     task_format_template_task: string|null,
-         *     task_format_template_instructions: string|null,
-         *     task_format_rendered_task: string|null,
-         *     task_format_rendered_instructions: string|null,
-         * } $jsonState
-         */
-        $jsonState = [
-            'pending_items' => [],
-            'initial_user_input' => $trimmedTask,
-            'formatted_task' => null,
-            'system_instructions' => $trimmedInstructions,
-            'thread_request_logged' => false,
-            'thread_request_meta' => is_array($threadRequestMeta) ? $threadRequestMeta : [],
-            'resumed_thread_id' => $resumeThreadId !== null && trim($resumeThreadId) !== '' ? trim($resumeThreadId) : null,
-            'workspace_event_logged' => false,
-            'workspace_event' => null,
-            'task_format_template_task' => $taskFormatTemplates['task'],
-            'task_format_template_instructions' => $taskFormatTemplates['instructions'],
-            'task_format_rendered_task' => null,
-            'task_format_rendered_instructions' => null,
-        ];
-        $this->refreshFormattedTask($jsonState);
-        $jsonState['workspace_event'] = $this->buildWorkspaceEvent(
-            $arguments,
-            $workspacePath,
-            $jsonState['task_format_template_task'],
-            $jsonState['task_format_template_instructions'],
-            $jsonState['task_format_rendered_task'],
-            $jsonState['task_format_rendered_instructions'],
-            $jsonState['formatted_task']
-        );
-
-        $this->maybeLogWorkspaceEvent($jsonLog, $codexSessionId, $jsonState);
-        $this->maybeLogThreadLifecycleEvent($jsonLog, $codexSessionId, $jsonState);
-
         try {
-            $process->run(function (string $type, string $buffer) use (&$jsonBuffer, &$codexSessionId, &$jsonState, &$jsonLog) {
-                if ($type === Process::OUT) {
-                    $jsonBuffer .= $buffer;
-                    $this->processJsonBuffer($jsonBuffer, $jsonLog, $codexSessionId, $jsonState);
+            $process = $this->buildProcess($arguments, false, $resumeThreadId);
+            $this->prepareProcess($process, $workspacePath);
+            $process->setTimeout(null);
+            $process->setIdleTimeout(null);
+            /**
+             * @var array{path: string|null, handle: resource|null, buffer: array<int, string>} $jsonLog
+             */
+            $jsonLog = [
+                'path' => null,
+                'handle' => null,
+                'buffer' => [],
+            ];
 
-                    return;
-                }
+            $jsonBuffer = '';
+            $codexSessionId = $resumeThreadId !== null && $resumeThreadId !== '' ? $resumeThreadId : null;
+            if ($codexSessionId !== null) {
+                $this->ensureJsonLogHandle($codexSessionId, $jsonLog);
+            }
+            $taskFormatTemplates = $this->resolveTaskFormatTemplates($taskFormatTemplates);
+            $trimmedTask = $initialUserInput !== null ? trim($initialUserInput) : null;
+            $trimmedInstructions = $systemInstructions !== null ? trim($systemInstructions) : null;
+            /**
+             * @var array{
+             *     pending_items: array<string, string>,
+             *     initial_user_input: string|null,
+             *     formatted_task: string|null,
+             *     system_instructions: string|null,
+             *     thread_request_logged: bool,
+             *     thread_request_meta: array<string, mixed>,
+             *     resumed_thread_id: string|null,
+             *     workspace_event_logged: bool,
+             *     workspace_event: array<string, mixed>|null,
+             *     task_format_template_task: string|null,
+             *     task_format_template_instructions: string|null,
+             *     task_format_rendered_task: string|null,
+             *     task_format_rendered_instructions: string|null,
+             * } $jsonState
+             */
+            $jsonState = [
+                'pending_items' => [],
+                'initial_user_input' => $trimmedTask,
+                'formatted_task' => null,
+                'system_instructions' => $trimmedInstructions,
+                'thread_request_logged' => false,
+                'thread_request_meta' => is_array($threadRequestMeta) ? $threadRequestMeta : [],
+                'resumed_thread_id' => $resumeThreadId !== null && trim($resumeThreadId) !== '' ? trim($resumeThreadId) : null,
+                'workspace_event_logged' => false,
+                'workspace_event' => null,
+                'task_format_template_task' => $taskFormatTemplates['task'],
+                'task_format_template_instructions' => $taskFormatTemplates['instructions'],
+                'task_format_rendered_task' => null,
+                'task_format_rendered_instructions' => null,
+            ];
+            $this->refreshFormattedTask($jsonState);
+            $jsonState['workspace_event'] = $this->buildWorkspaceEvent(
+                $arguments,
+                $workspacePath,
+                $jsonState['task_format_template_task'],
+                $jsonState['task_format_template_instructions'],
+                $jsonState['task_format_rendered_task'],
+                $jsonState['task_format_rendered_instructions'],
+                $jsonState['formatted_task']
+            );
 
-                $clean = $this->stripEscapeSequences($buffer);
-                if ($clean !== '') {
-                    $this->streamToTerminal(Process::ERR, $clean);
-                }
+            $this->maybeLogWorkspaceEvent($jsonLog, $codexSessionId, $jsonState);
+            $this->maybeLogThreadLifecycleEvent($jsonLog, $codexSessionId, $jsonState);
+
+            $this->registerTerminationHandlers(function (int $signal) use (&$jsonLog, &$codexSessionId, $generatedSessionId, $process): void {
+                $this->recordManualTermination($signal, $process, $jsonLog, $codexSessionId, $generatedSessionId);
             });
 
-            if (trim($jsonBuffer) !== '') {
-                $this->processJsonLine($jsonBuffer, $jsonLog, $codexSessionId, $jsonState);
+            try {
+                $process->run(function (string $type, string $buffer) use (&$jsonBuffer, &$codexSessionId, &$jsonState, &$jsonLog) {
+                    if ($type === Process::OUT) {
+                        $jsonBuffer .= $buffer;
+                        $this->processJsonBuffer($jsonBuffer, $jsonLog, $codexSessionId, $jsonState);
+
+                        return;
+                    }
+
+                    $clean = $this->stripEscapeSequences($buffer);
+                    if ($clean !== '') {
+                        $this->streamToTerminal(Process::ERR, $clean);
+                    }
+                });
+
+                if (trim($jsonBuffer) !== '') {
+                    $this->processJsonLine($jsonBuffer, $jsonLog, $codexSessionId, $jsonState);
+                }
+            } finally {
+                try {
+                    if ($codexSessionId === null || $codexSessionId === '') {
+                        $codexSessionId = $generatedSessionId;
+                    }
+
+                    $this->ensureJsonLogHandle($codexSessionId, $jsonLog);
+
+                    if (is_resource($jsonLog['handle'])) {
+                        fclose($jsonLog['handle']);
+                    }
+                } finally {
+                    $this->restoreTerminationHandlers();
+                }
             }
+
+            if (! $process->isSuccessful() && ! $this->terminationRequested) {
+                throw new ProcessFailedException($process);
+            }
+
+            if ($jsonLog['path'] === null) {
+                throw new RuntimeException('JSON log file path could not be determined.');
+            }
+
+            return [
+                'process' => $process,
+                'codex_session_id' => $codexSessionId,
+                'json_file_path' => $jsonLog['path'],
+            ];
         } finally {
-            if ($codexSessionId === null || $codexSessionId === '') {
-                $codexSessionId = $generatedSessionId;
-            }
-
-            $this->ensureJsonLogHandle($codexSessionId, $jsonLog);
-
-            if (is_resource($jsonLog['handle'])) {
-                fclose($jsonLog['handle']);
-            }
+            $this->resetTerminationState();
         }
-
-        if (! $process->isSuccessful()) {
-            throw new ProcessFailedException($process);
-        }
-
-        if ($jsonLog['path'] === null) {
-            throw new RuntimeException('JSON log file path could not be determined.');
-        }
-
-        return [
-            'process' => $process,
-            'codex_session_id' => $codexSessionId,
-            'json_file_path' => $jsonLog['path'],
-        ];
     }
 
     /**
@@ -1474,5 +1498,132 @@ class CodexCliSessionService
 
         fwrite($stream, $cleanBuffer);
         fflush($stream);
+    }
+
+    /**
+     * @param  array{path: string|null, handle: resource|null, buffer: array<int, string>}  $jsonLog
+     */
+    private function recordManualTermination(
+        int $signal,
+        Process $process,
+        array &$jsonLog,
+        ?string &$codexSessionId,
+        string $generatedSessionId
+    ): void {
+        if ($this->terminationRequested === true) {
+            return;
+        }
+
+        $this->terminationRequested = true;
+        $this->terminationSignal = $signal;
+
+        $sessionIdForLog = $codexSessionId !== null && $codexSessionId !== '' ? $codexSessionId : $generatedSessionId;
+
+        $this->ensureJsonLogHandle($sessionIdForLog, $jsonLog);
+
+        $event = [
+            'type' => 'thread.terminated',
+            'reason' => 'user_interrupt',
+            'signal' => [
+                'code' => $signal,
+                'name' => $this->resolveSignalName($signal),
+            ],
+        ];
+
+        $encoded = $this->encodeEventLine($event);
+        if ($encoded !== null) {
+            $this->writeToJsonLog($encoded, $jsonLog);
+        }
+
+        $formatted = $this->formatLines(['session interrupted by user']);
+        if ($formatted !== null) {
+            $this->streamToTerminal(Process::OUT, $formatted);
+        }
+
+        $process->stop(0, $signal);
+    }
+
+    private function registerTerminationHandlers(callable $handler): void
+    {
+        if (! $this->supportsSignalHandling()) {
+            return;
+        }
+
+        $signals = $this->supportedSignals();
+
+        if ($signals === []) {
+            return;
+        }
+
+        $this->previousAsyncSignalState = pcntl_async_signals(true);
+        $this->previousSignalHandlers = [];
+
+        foreach ($signals as $signal) {
+            $previous = pcntl_signal_get_handler($signal);
+            $this->previousSignalHandlers[$signal] = $previous;
+            pcntl_signal($signal, $handler);
+        }
+    }
+
+    private function restoreTerminationHandlers(): void
+    {
+        if (! $this->supportsSignalHandling()) {
+            return;
+        }
+
+        foreach ($this->previousSignalHandlers as $signal => $handler) {
+            if ($handler === SIG_DFL || $handler === SIG_IGN || is_callable($handler)) {
+                pcntl_signal($signal, $handler);
+            } else {
+                pcntl_signal($signal, SIG_DFL);
+            }
+        }
+
+        if ($this->previousAsyncSignalState !== null) {
+            pcntl_async_signals($this->previousAsyncSignalState);
+        }
+
+        $this->previousSignalHandlers = [];
+        $this->previousAsyncSignalState = null;
+    }
+
+    private function supportsSignalHandling(): bool
+    {
+        return function_exists('pcntl_signal') && function_exists('pcntl_async_signals') && function_exists('pcntl_signal_get_handler');
+    }
+
+    /**
+     * @return array<int, int>
+     */
+    private function supportedSignals(): array
+    {
+        $signals = [];
+
+        foreach (['SIGINT', 'SIGTERM', 'SIGQUIT'] as $signalName) {
+            if (defined($signalName)) {
+                $signals[] = (int) constant($signalName);
+            }
+        }
+
+        return $signals;
+    }
+
+    private function resolveSignalName(int $signal): ?string
+    {
+        $map = [];
+
+        foreach (['SIGINT', 'SIGTERM', 'SIGQUIT'] as $signalName) {
+            if (defined($signalName)) {
+                $map[(int) constant($signalName)] = $signalName;
+            }
+        }
+
+        return $map[$signal] ?? null;
+    }
+
+    private function resetTerminationState(): void
+    {
+        $this->terminationRequested = false;
+        $this->terminationSignal = null;
     }
 }

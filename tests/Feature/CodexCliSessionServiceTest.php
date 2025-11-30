@@ -667,6 +667,66 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertArrayNotHasKey('instructions', $firstEvent);
     }
 
+    public function test_headless_session_logs_manual_termination_event_on_signal(): void
+    {
+        if (! function_exists('pcntl_signal') || ! function_exists('posix_kill') || ! defined('SIGINT')) {
+            $this->markTestSkipped('Signal handling is not available in this environment.');
+        }
+
+        $this->cleanCodexDirectory();
+
+        $workspacePath = $this->workspacePath();
+        $service = new TestCodexCliSessionService(null, $workspacePath);
+        /** @var Process&\Mockery\MockInterface $process */
+        $process = Mockery::mock(Process::class);
+
+        $events = [
+            ['type' => 'thread.started', 'thread_id' => 'thread-interrupted'],
+        ];
+
+        $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')->once()->with($workspacePath)->andReturnSelf();
+        $this->mockExpectation($process, 'run')
+            ->once()
+            ->andReturnUsing(function (callable $callback) use ($events): int {
+                foreach ($events as $event) {
+                    $callback(Process::OUT, json_encode($event)."\n");
+                }
+
+                posix_kill(posix_getpid(), SIGINT);
+
+                return 130;
+            });
+        $this->mockExpectation($process, 'stop')
+            ->once()
+            ->with(0, SIGINT)
+            ->andReturnNull();
+        $this->mockExpectation($process, 'isSuccessful')
+            ->once()
+            ->andReturn(false);
+        $this->mockExpectation($process, 'getExitCode')
+            ->once()
+            ->andReturn(130);
+
+        $service->headlessProcess = $process;
+
+        $result = $service->startSession(['tasks:list'], false, 'tasks:list', null, null, null);
+
+        $this->assertSame(130, $result['exit_code']);
+        $expectedPath = $this->codexSessionsDirectory().DIRECTORY_SEPARATOR.'thread-interrupted.jsonl';
+        $this->assertFileExists($expectedPath);
+
+        $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
+        $termination = json_decode(end($lines) ?: '', true);
+
+        $this->assertIsArray($termination);
+        $this->assertSame('thread.terminated', $termination['type'] ?? null);
+        $this->assertSame('user_interrupt', $termination['reason'] ?? null);
+        $this->assertSame(SIGINT, $termination['signal']['code'] ?? null);
+        $this->assertSame('SIGINT', $termination['signal']['name'] ?? null);
+    }
+
     public function test_headless_session_throws_when_process_fails(): void
     {
         $this->cleanCodexDirectory();
