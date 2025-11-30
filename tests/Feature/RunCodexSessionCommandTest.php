@@ -35,7 +35,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null, Mockery::type('callable'))
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -64,7 +64,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null, Mockery::type('callable'))
             ->andThrow(new \RuntimeException('bad run'));
 
         $this->app->instance(CodexCliSessionService::class, $mockService);
@@ -86,7 +86,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=o1-mini', '--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--model=o1-mini', '--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null, Mockery::type('callable'))
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -115,7 +115,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=medium', '--config=approval_policy=on-request', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=medium', '--config=approval_policy=on-request', 'tasks:list'], false, 'tasks:list', null, null, null, null, null, Mockery::type('callable'))
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -144,7 +144,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=deep', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=deep', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null, Mockery::type('callable'))
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -173,7 +173,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list', '--plan'], false, 'tasks:list --plan', null, null, null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list', '--plan'], false, 'tasks:list --plan', null, null, null, null, null, Mockery::type('callable'))
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -197,7 +197,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, '/tmp/codex-workspace', null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, '/tmp/codex-workspace', null, Mockery::type('callable'))
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -224,7 +224,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', 'Follow the handbook', null, null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', 'Follow the handbook', null, null, null, null, Mockery::type('callable'))
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -262,7 +262,8 @@ final class RunCodexSessionCommandTest extends TestCase
                 [
                     'task' => 'Task: {TASK} [override]',
                     'instructions' => 'Instructions: {INSTRUCTIONS} [override]',
-                ]
+                ],
+                Mockery::type('callable')
             )
             ->andReturn([
                 'session_id' => 'thread-xyz',
@@ -291,7 +292,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, ['assistant_id' => 'assistant-1'], null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, ['assistant_id' => 'assistant-1'], null, null, null, Mockery::type('callable'))
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -332,7 +333,7 @@ final class RunCodexSessionCommandTest extends TestCase
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, 'thread-123', null, null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, 'thread-123', null, null, Mockery::type('callable'))
             ->andReturn([
                 'session_id' => 'thread-123',
                 'json_file_path' => '/tmp/thread-123.jsonl',

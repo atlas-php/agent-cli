@@ -23,6 +23,11 @@ class CodexCliSessionService
 
     private ?string $workspaceDirectory;
 
+    /**
+     * @var callable|null
+     */
+    private $outputHandler = null;
+
     public function __construct(?string $sessionDirectory = null, ?string $workspaceDirectory = null)
     {
         $this->sessionDirectory = $sessionDirectory ?? $this->defaultSessionDirectory();
@@ -33,6 +38,7 @@ class CodexCliSessionService
      * @param  array<int, string>  $arguments
      * @param  array<string, mixed>|null  $threadRequestMeta
      * @param  array{task?: string|null, instructions?: string|null}|null  $taskFormatTemplates
+     * @param  callable(string, string):void|null  $outputHandler
      * @return array{session_id: string, json_file_path: string|null, exit_code: int|null}
      */
     public function startSession(
@@ -43,41 +49,48 @@ class CodexCliSessionService
         ?array $threadRequestMeta = null,
         ?string $resumeThreadId = null,
         ?string $workspaceOverride = null,
-        ?array $taskFormatTemplates = null
+        ?array $taskFormatTemplates = null,
+        ?callable $outputHandler = null
     ): array {
         $sessionId = $resumeThreadId !== null && $resumeThreadId !== ''
             ? $resumeThreadId
             : (string) Str::uuid();
         $workspacePath = $this->normalizeDirectoryPath($workspaceOverride) ?? $this->workspaceDirectory;
-        if ($interactive) {
-            $process = $this->runInteractive($arguments, $resumeThreadId, $workspacePath);
+        $this->outputHandler = $outputHandler;
+
+        try {
+            if ($interactive) {
+                $process = $this->runInteractive($arguments, $resumeThreadId, $workspacePath);
+
+                return [
+                    'session_id' => $sessionId,
+                    'json_file_path' => null,
+                    'exit_code' => $process->getExitCode(),
+                ];
+            }
+
+            $headlessResult = $this->runHeadless(
+                $arguments,
+                $sessionId,
+                $initialUserInput,
+                $systemInstructions,
+                $threadRequestMeta,
+                $resumeThreadId,
+                $workspacePath,
+                $taskFormatTemplates
+            );
+            $process = $headlessResult['process'];
+            $codexSessionId = $headlessResult['codex_session_id'] ?? $sessionId;
+            $jsonFilePath = $headlessResult['json_file_path'];
 
             return [
-                'session_id' => $sessionId,
-                'json_file_path' => null,
+                'session_id' => $codexSessionId,
+                'json_file_path' => $jsonFilePath,
                 'exit_code' => $process->getExitCode(),
             ];
+        } finally {
+            $this->outputHandler = null;
         }
-
-        $headlessResult = $this->runHeadless(
-            $arguments,
-            $sessionId,
-            $initialUserInput,
-            $systemInstructions,
-            $threadRequestMeta,
-            $resumeThreadId,
-            $workspacePath,
-            $taskFormatTemplates
-        );
-        $process = $headlessResult['process'];
-        $codexSessionId = $headlessResult['codex_session_id'] ?? $sessionId;
-        $jsonFilePath = $headlessResult['json_file_path'];
-
-        return [
-            'session_id' => $codexSessionId,
-            'json_file_path' => $jsonFilePath,
-            'exit_code' => $process->getExitCode(),
-        ];
     }
 
     /**
@@ -1210,22 +1223,10 @@ class CodexCliSessionService
 
         switch ($type) {
             case 'thread.request':
-                $instructions = trim((string) ($event['instructions'] ?? ''));
-                $task = trim((string) ($event['task'] ?? ''));
-
-                return $this->formatLines([
-                    'thread request',
-                    $instructions !== '' ? 'instructions: '.$instructions : null,
-                    $task !== '' ? 'task: '.$task : null,
-                ]);
+                return $this->formatLines(['session input received']);
 
             case 'thread.resumed':
-                $task = trim((string) ($event['task'] ?? ''));
-
-                return $this->formatLines([
-                    'thread resumed',
-                    $task !== '' ? 'task: '.$task : null,
-                ]);
+                return $this->formatLines(['resuming previous session']);
 
             case 'thread.started':
                 if (isset($event['thread_id']) && $event['thread_id'] !== '') {
@@ -1233,26 +1234,12 @@ class CodexCliSessionService
                 }
 
                 return $this->formatLines([
-                    'thread started',
+                    'session started',
                     $codexSessionId !== null ? 'session id: '.$codexSessionId : null,
                 ]);
 
             case 'workspace':
-                return $this->formatLines([
-                    'workspace',
-                    isset($event['provider']) ? 'provider: '.$event['provider'] : null,
-                    isset($event['workspace_path']) ? 'codex: '.$event['workspace_path'] : null,
-                    isset($event['platform_path']) ? 'platform: '.$event['platform_path'] : null,
-                    isset($event['session_log_path']) ? 'logs: '.$event['session_log_path'] : null,
-                    isset($event['model']) ? 'model: '.$event['model'] : null,
-                    isset($event['reasoning']) ? 'reasoning: '.$event['reasoning'] : null,
-                    isset($event['approval']) ? 'approval: '.$event['approval'] : null,
-                    isset($event['template_task']) ? 'template (task): '.$event['template_task'] : null,
-                    isset($event['template_instructions']) ? 'template (instructions): '.$event['template_instructions'] : null,
-                    isset($event['instructions_rendered']) ? 'instructions rendered: '.$event['instructions_rendered'] : null,
-                    isset($event['task_rendered']) ? 'task rendered: '.$event['task_rendered'] : null,
-                    isset($event['full_message_rendered']) ? 'full message: '.$event['full_message_rendered'] : null,
-                ]);
+                return $this->formatLines(['workspace ready']);
 
             case 'turn.started':
                 return null;
@@ -1302,9 +1289,9 @@ class CodexCliSessionService
             'reasoning' => $this->renderReasoningItem($item),
             'agent_message' => $this->renderAgentMessageItem($item),
             'command_execution' => $this->renderCommandExecutionItem($phase, $item, $state),
+            'file_edit', 'file_change' => $this->renderFileEditItem($phase, $item),
             default => $this->formatLines([
                 sprintf('item (%s) %s', $itemType !== '' ? $itemType : 'unknown', $phase),
-                json_encode($item, JSON_PRETTY_PRINT) ?: '{}',
             ]),
         };
     }
@@ -1321,7 +1308,7 @@ class CodexCliSessionService
         }
 
         return $this->formatLines([
-            'thinking',
+            'reasoning',
             $text,
         ]);
     }
@@ -1338,7 +1325,7 @@ class CodexCliSessionService
         }
 
         return $this->formatLines([
-            'codex',
+            'agent message',
             $text,
         ]);
     }
@@ -1374,8 +1361,8 @@ class CodexCliSessionService
             }
 
             return $this->formatLines([
-                'exec',
-                $command,
+                'running command',
+                $command !== '' ? $command : null,
             ]);
         }
 
@@ -1387,25 +1374,35 @@ class CodexCliSessionService
             unset($state['pending_items'][$itemId]);
         }
 
-        $output = $this->stripEscapeSequences((string) ($item['aggregated_output'] ?? ''));
         $exitCode = $item['exit_code'] ?? null;
 
         $lines = [];
 
-        if ($phase === 'completed' && ! $hasPending && $command !== '') {
-            $lines[] = 'exec';
-            $lines[] = $command;
+        if ($phase === 'completed') {
+            $lines[] = $command !== '' ? 'command finished: '.$command : 'command finished';
+
+            if ($exitCode !== null) {
+                $lines[] = 'exit code: '.$exitCode;
+            }
+
+            return $this->formatLines($lines);
         }
 
-        if ($output !== '') {
-            $lines[] = rtrim($output, "\n");
-        }
+        return null;
+    }
 
-        if ($exitCode !== null && $phase === 'completed') {
-            $lines[] = 'exit code: '.$exitCode;
-        }
+    /**
+     * @param  array<string, mixed>  $item
+     */
+    private function renderFileEditItem(string $phase, array $item): ?string
+    {
+        $path = trim((string) ($item['path'] ?? ($item['file'] ?? ($item['file_path'] ?? ''))));
+        $label = $phase === 'completed' ? 'edited file' : 'editing file';
 
-        return $this->formatLines($lines);
+        return $this->formatLines([
+            $label,
+            $path !== '' ? $path : null,
+        ]);
     }
 
     /**
@@ -1456,6 +1453,12 @@ class CodexCliSessionService
 
     protected function streamToTerminal(string $type, string $cleanBuffer): void
     {
+        if ($this->outputHandler !== null) {
+            ($this->outputHandler)($type, $cleanBuffer);
+
+            return;
+        }
+
         $stream = $type === Process::OUT ? STDOUT : STDERR;
 
         fwrite($stream, $cleanBuffer);

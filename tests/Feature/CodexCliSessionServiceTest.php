@@ -97,10 +97,11 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertSame('Task: tasks:list', $firstEvent['task'] ?? null);
         $this->assertArrayNotHasKey('instructions', $firstEvent);
 
-        $this->assertStringContainsString('thread request', $output);
-        $this->assertStringContainsString('thread started', $output);
+        $this->assertStringContainsString('session started', $output);
+        $this->assertStringContainsString('running command', $output);
+        $this->assertStringContainsString('command finished', $output);
         $this->assertStringContainsString('tokens used', $output);
-        $this->assertStringContainsString('workspace', $output);
+        $this->assertStringNotContainsString("output\nline", $output);
     }
 
     public function test_workspace_event_logs_workspace_and_model_details(): void

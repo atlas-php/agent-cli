@@ -6,6 +6,7 @@ namespace Atlas\Agent\Console\Commands;
 
 use Atlas\Agent\Services\CodexCliSessionService;
 use Illuminate\Console\Command;
+use Symfony\Component\Process\Process;
 
 /**
  * Class RunCodexSessionCommand
@@ -84,6 +85,7 @@ class RunCodexSessionCommand extends Command
         $arguments = $this->injectRuntimeOptions($arguments);
         $interactive = (bool) $this->option('interactive');
         $taskFormatTemplates = $this->resolveTemplateOptions();
+        $outputHandler = $interactive ? null : $this->buildOutputHandler();
 
         try {
             $result = $this->sessionService->startSession(
@@ -94,7 +96,8 @@ class RunCodexSessionCommand extends Command
                 $threadRequestMeta,
                 $resumeThreadId,
                 $workspaceOverride,
-                $taskFormatTemplates
+                $taskFormatTemplates,
+                $outputHandler
             );
         } catch (\Throwable $exception) {
             $this->error('Codex session failed: '.$exception->getMessage());
@@ -384,5 +387,34 @@ class RunCodexSessionCommand extends Command
         }
 
         return true;
+    }
+
+    private function buildOutputHandler(): callable
+    {
+        return function (string $type, string $message): void {
+            $lines = array_values(array_filter(
+                array_map(static fn (string $line): string => trim($line), explode("\n", $message)),
+                static fn (string $line): bool => $line !== ''
+            ));
+
+            foreach ($lines as $line) {
+                if ($type === Process::OUT && str_starts_with($line, 'exit code: ')) {
+                    $exitCode = (int) substr($line, 11);
+                    if ($exitCode !== 0) {
+                        $this->error($line);
+
+                        continue;
+                    }
+                }
+
+                if ($type === Process::ERR) {
+                    $this->error($line);
+
+                    continue;
+                }
+
+                $this->info($line);
+            }
+        };
     }
 }
