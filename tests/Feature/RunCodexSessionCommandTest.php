@@ -29,12 +29,13 @@ final class RunCodexSessionCommandTest extends TestCase
     {
         config()->set('atlas-agent-cli.model.codex', 'gpt-5.1-codex-max');
         config()->set('atlas-agent-cli.reasoning.codex', 'medium');
+        config()->set('atlas-agent-cli.approval.codex', 'never');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -57,12 +58,13 @@ final class RunCodexSessionCommandTest extends TestCase
     {
         config()->set('atlas-agent-cli.model.codex', null);
         config()->set('atlas-agent-cli.reasoning.codex', 'medium');
+        config()->set('atlas-agent-cli.approval.codex', 'never');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
             ->andThrow(new \RuntimeException('bad run'));
 
         $this->app->instance(CodexCliSessionService::class, $mockService);
@@ -78,12 +80,13 @@ final class RunCodexSessionCommandTest extends TestCase
     {
         config()->set('atlas-agent-cli.model.codex', 'gpt-5.1-codex-max');
         config()->set('atlas-agent-cli.reasoning.codex', 'medium');
+        config()->set('atlas-agent-cli.approval.codex', 'never');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=o1-mini', '--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--model=o1-mini', '--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -102,16 +105,46 @@ final class RunCodexSessionCommandTest extends TestCase
             ->assertExitCode(Command::SUCCESS);
     }
 
-    public function test_command_can_override_reasoning_via_option(): void
+    public function test_command_can_override_approval_via_option(): void
     {
         config()->set('atlas-agent-cli.model.codex', 'gpt-5.1-codex-max');
         config()->set('atlas-agent-cli.reasoning.codex', 'medium');
+        config()->set('atlas-agent-cli.approval.codex', 'never');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=deep', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=medium', '--config=approval_policy=on-request', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
+            ->andReturn([
+                'session_id' => 'thread-xyz',
+                'json_file_path' => '/tmp/thread-xyz.jsonl',
+                'exit_code' => 0,
+            ]);
+
+        $this->app->instance(CodexCliSessionService::class, $mockService);
+
+        /** @var \Illuminate\Testing\PendingCommand $command */
+        $command = $this->artisan('codex:session', [
+            'args' => ['tasks:list'],
+            '--approval' => 'on-request',
+        ]);
+        $command
+            ->expectsOutput('Codex session completed.')
+            ->assertExitCode(Command::SUCCESS);
+    }
+
+    public function test_command_can_override_reasoning_via_option(): void
+    {
+        config()->set('atlas-agent-cli.model.codex', 'gpt-5.1-codex-max');
+        config()->set('atlas-agent-cli.reasoning.codex', 'medium');
+        config()->set('atlas-agent-cli.approval.codex', 'never');
+
+        /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
+        $mockService = Mockery::mock(CodexCliSessionService::class);
+        $this->mockExpectation($mockService, 'startSession')
+            ->once()
+            ->with(['--model=gpt-5.1-codex-max', '--config=model_reasoning_effort=deep', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -134,12 +167,13 @@ final class RunCodexSessionCommandTest extends TestCase
     {
         config()->set('atlas-agent-cli.model.codex', null);
         config()->set('atlas-agent-cli.reasoning.codex', 'medium');
+        config()->set('atlas-agent-cli.approval.codex', 'never');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', 'tasks:list', '--plan'], false, 'tasks:list --plan', null, null, null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list', '--plan'], false, 'tasks:list --plan', null, null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -157,12 +191,13 @@ final class RunCodexSessionCommandTest extends TestCase
     {
         config()->set('atlas-agent-cli.model.codex', null);
         config()->set('atlas-agent-cli.reasoning.codex', 'medium');
+        config()->set('atlas-agent-cli.approval.codex', 'never');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, null, '/tmp/codex-workspace', null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null, '/tmp/codex-workspace', null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -183,12 +218,13 @@ final class RunCodexSessionCommandTest extends TestCase
     {
         config()->set('atlas-agent-cli.model.codex', null);
         config()->set('atlas-agent-cli.reasoning.codex', 'medium');
+        config()->set('atlas-agent-cli.approval.codex', 'never');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', 'Follow the handbook', null, null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', 'Follow the handbook', null, null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -209,13 +245,14 @@ final class RunCodexSessionCommandTest extends TestCase
     {
         config()->set('atlas-agent-cli.model.codex', null);
         config()->set('atlas-agent-cli.reasoning.codex', 'medium');
+        config()->set('atlas-agent-cli.approval.codex', 'never');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
             ->with(
-                ['--config=model_reasoning_effort=medium', 'tasks:list'],
+                ['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'],
                 false,
                 'tasks:list',
                 null,
@@ -248,12 +285,13 @@ final class RunCodexSessionCommandTest extends TestCase
     {
         config()->set('atlas-agent-cli.model.codex', null);
         config()->set('atlas-agent-cli.reasoning.codex', 'medium');
+        config()->set('atlas-agent-cli.approval.codex', 'never');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, ['assistant_id' => 'assistant-1'], null, null, null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, ['assistant_id' => 'assistant-1'], null, null, null)
             ->andReturn([
                 'session_id' => 'thread-xyz',
                 'json_file_path' => '/tmp/thread-xyz.jsonl',
@@ -288,12 +326,13 @@ final class RunCodexSessionCommandTest extends TestCase
     {
         config()->set('atlas-agent-cli.model.codex', null);
         config()->set('atlas-agent-cli.reasoning.codex', 'medium');
+        config()->set('atlas-agent-cli.approval.codex', 'never');
 
         /** @var CodexCliSessionService&\Mockery\MockInterface $mockService */
         $mockService = Mockery::mock(CodexCliSessionService::class);
         $this->mockExpectation($mockService, 'startSession')
             ->once()
-            ->with(['--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, 'thread-123', null, null)
+            ->with(['--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, 'thread-123', null, null)
             ->andReturn([
                 'session_id' => 'thread-123',
                 'json_file_path' => '/tmp/thread-123.jsonl',

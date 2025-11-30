@@ -134,7 +134,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $service->headlessProcess = $process;
 
-        $service->startSession(['--model=o1-mini', '--config=model_reasoning_effort=medium', 'tasks:list'], false, 'tasks:list', null, null, null);
+        $service->startSession(['--model=o1-mini', '--config=model_reasoning_effort=medium', '--config=approval_policy=never', 'tasks:list'], false, 'tasks:list', null, null, null);
 
         $expectedDirectory = $this->codexSessionsDirectory();
         $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-modelled.jsonl';
@@ -146,6 +146,7 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
         $this->assertSame('o1-mini', $workspaceEvent['model'] ?? null);
         $this->assertSame('medium', $workspaceEvent['reasoning'] ?? null);
+        $this->assertSame('never', $workspaceEvent['approval'] ?? null);
         $this->assertSame(realpath($workspacePath) ?: $workspacePath, $workspaceEvent['workspace_path'] ?? null);
     }
 
@@ -180,7 +181,7 @@ final class CodexCliSessionServiceTest extends TestCase
 
         $service->headlessProcess = $process;
 
-        $service->startSession(['--config', 'model_reasoning_effort=deep', 'tasks:list'], false, 'tasks:list', null, null, null);
+        $service->startSession(['--config', 'model_reasoning_effort=deep', '--config', 'approval_policy=on-request', 'tasks:list'], false, 'tasks:list', null, null, null);
 
         $expectedDirectory = $this->codexSessionsDirectory();
         $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-reasoning.jsonl';
@@ -191,6 +192,51 @@ final class CodexCliSessionServiceTest extends TestCase
         $this->assertIsArray($workspaceEvent);
         $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
         $this->assertSame('deep', $workspaceEvent['reasoning'] ?? null);
+        $this->assertSame('on-request', $workspaceEvent['approval'] ?? null);
+    }
+
+    public function test_workspace_event_logs_approval_policy_when_provided(): void
+    {
+        $this->cleanCodexDirectory();
+
+        $workspacePath = $this->workspacePath();
+        $service = new TestCodexCliSessionService(null, $workspacePath);
+        /** @var Process&\Mockery\MockInterface $process */
+        $process = Mockery::mock(Process::class);
+
+        $events = [
+            ['type' => 'thread.started', 'thread_id' => 'thread-approval'],
+            ['type' => 'turn.completed', 'usage' => ['input_tokens' => 5, 'output_tokens' => 5]],
+        ];
+
+        $this->mockExpectation($process, 'setTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setIdleTimeout')->once()->with(null)->andReturnSelf();
+        $this->mockExpectation($process, 'setWorkingDirectory')->once()->with($workspacePath)->andReturnSelf();
+        $this->mockExpectation($process, 'run')
+            ->once()
+            ->andReturnUsing(function (callable $callback) use ($events): int {
+                foreach ($events as $event) {
+                    $callback(Process::OUT, json_encode($event)."\n");
+                }
+
+                return 0;
+            });
+        $this->mockExpectation($process, 'isSuccessful')->once()->andReturn(true);
+        $this->mockExpectation($process, 'getExitCode')->once()->andReturn(0);
+
+        $service->headlessProcess = $process;
+
+        $service->startSession(['--config=approval_policy=untrusted', 'tasks:list'], false, 'tasks:list', null, null, null);
+
+        $expectedDirectory = $this->codexSessionsDirectory();
+        $expectedPath = $expectedDirectory.DIRECTORY_SEPARATOR.'thread-approval.jsonl';
+        $this->assertFileExists($expectedPath);
+
+        $lines = array_values(array_filter(explode("\n", (string) file_get_contents($expectedPath))));
+        $workspaceEvent = json_decode($lines[0] ?? '', true);
+        $this->assertIsArray($workspaceEvent);
+        $this->assertSame('workspace', $workspaceEvent['type'] ?? null);
+        $this->assertSame('untrusted', $workspaceEvent['approval'] ?? null);
     }
 
     public function test_workspace_override_changes_process_directory_and_log_entry(): void

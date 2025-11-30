@@ -24,6 +24,7 @@ class RunCodexSessionCommand extends Command
         {--interactive : Run Codex attached to your terminal without logging}
         {--model= : Override the Codex model for this run}
         {--reasoning= : Control the Codex reasoning strategy for this run}
+        {--approval= : Control the Codex approval policy for command execution}
         {--instructions= : Additional system instructions appended ahead of the user task}
         {--template-task= : Template used to render the task payload for this run}
         {--template-instructions= : Template used to render the instructions payload for this run}
@@ -128,6 +129,11 @@ class RunCodexSessionCommand extends Command
             $injected[] = '--config=model_reasoning_effort='.$reasoning;
         }
 
+        $approval = $this->resolveApprovalOption();
+        if ($approval !== null && ! $this->hasApprovalConfiguration($arguments)) {
+            $injected[] = '--config=approval_policy='.$approval;
+        }
+
         if ($injected === []) {
             return $arguments;
         }
@@ -203,6 +209,32 @@ class RunCodexSessionCommand extends Command
         return is_string($configured) && $configured !== '' ? $configured : null;
     }
 
+    private function resolveApprovalOption(): ?string
+    {
+        $option = $this->option('approval');
+        if (is_string($option)) {
+            $option = trim($option);
+        }
+
+        if (is_string($option) && $option !== '') {
+            return $option;
+        }
+
+        $configured = config('atlas-agent-cli.approval.'.self::PROVIDER);
+
+        if (! is_string($configured)) {
+            $configured = config('atlas-agent-cli.approval');
+
+            if (is_array($configured)) {
+                $configured = $configured[self::PROVIDER] ?? null;
+            }
+        }
+
+        $configured = is_string($configured) ? trim($configured) : $configured;
+
+        return is_string($configured) && $configured !== '' ? $configured : null;
+    }
+
     /**
      * @param  array<int, string>  $arguments
      */
@@ -226,6 +258,37 @@ class RunCodexSessionCommand extends Command
             if ($argument === '--config') {
                 $next = $arguments[$index + 1] ?? null;
                 if (is_string($next) && str_starts_with($next, 'model_reasoning_effort=')) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<int, string>  $arguments
+     */
+    private function hasApprovalConfiguration(array $arguments): bool
+    {
+        foreach ($arguments as $index => $argument) {
+            if ($argument === '--approval') {
+                return true;
+            }
+
+            if (str_starts_with($argument, '--approval=')) {
+                return true;
+            }
+
+            if (str_starts_with($argument, '--config=')) {
+                if (str_contains($argument, 'approval_policy=')) {
+                    return true;
+                }
+            }
+
+            if ($argument === '--config') {
+                $next = $arguments[$index + 1] ?? null;
+                if (is_string($next) && str_starts_with($next, 'approval_policy=')) {
                     return true;
                 }
             }

@@ -65,6 +65,20 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Codex Approval Policy
+    |--------------------------------------------------------------------------
+    |
+    | Control when Codex pauses for approval before executing commands. Valid
+    | values: untrusted, on-failure, on-request, never. The --approval option
+    | overrides this per invocation.
+    |
+    */
+    'approval' => [
+        'codex' => env('ATLAS_AGENT_CLI_APPROVAL_CODEX', 'never'),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Task and Instruction Format
     |--------------------------------------------------------------------------
     |

@@ -49,6 +49,7 @@ Options:
 * `--interactive` – run Codex directly attached to your terminal (no JSON logging).
 * `--model=` – override the Codex model for the current run.
 * `--reasoning=` – set the Codex reasoning strategy (for example: `medium`, `deep`) for this run; forwarded to Codex as `--config model_reasoning_effort=<value>`.
+* `--approval=` – set the Codex approval policy (`untrusted`, `on-failure`, `on-request`, `never`) for this run; forwarded to Codex as `--config approval_policy=<value>`.
 * `--instructions=` – prepend additional system instructions ahead of the user task; stored in the JSON log as a `thread.request` event.
 * `--template-task=` / `--template-instructions=` – override the configured task/instructions templates for a single run when you want to reshape the payload without editing config.
 * `--meta=` – supply a JSON object of metadata (IDs, tags, etc.) that is recorded alongside the synthetic thread lifecycle log entry.
@@ -84,7 +85,7 @@ The service handles both interactive and headless runs, automatically sanitizes 
 
 When invoking the service directly you may pass a workspace override and optional task/instruction templates as the final arguments (`startSession($args, $interactive, ..., $workspaceOverride, $templates)`), mirroring the `--workspace` and `--template-*` console options.
 
-Each headless log now begins with a `workspace` entry that captures the provider (`codex`), the Codex workspace path, the platform path, the JSONL log directory, the effective model, and the reasoning strategy for the run. This is followed by the synthetic `thread.request` (or `thread.resumed`) entry summarizing system instructions, the triggering task, and any metadata supplied via `--meta`, so downstream tooling can reconstruct the full prompt context. When resuming a thread via `--resume`, the log still records a `thread.resumed` entry containing the latest user task (plus metadata) without re-stating the original instructions.
+Each headless log now begins with a `workspace` entry that captures the provider (`codex`), the Codex workspace path, the platform path, the JSONL log directory, the effective model, the reasoning strategy, and the approval policy for the run. This is followed by the synthetic `thread.request` (or `thread.resumed`) entry summarizing system instructions, the triggering task, and any metadata supplied via `--meta`, so downstream tooling can reconstruct the full prompt context. When resuming a thread via `--resume`, the log still records a `thread.resumed` entry containing the latest user task (plus metadata) without re-stating the original instructions.
 
 ## Configuration
 
@@ -102,6 +103,7 @@ The `config/atlas-agent-cli.php` file exposes:
 * `workspace.path` – the working directory Codex should execute within. Defaults to your Laravel application's base path but can be pointed at any detached workspace (override via `ATLAS_AGENT_CLI_WORKSPACE_PATH` or the `--workspace` command option for per-run overrides).
 * `model.<provider>` – default model applied per provider unless overridden with `--model`. Codex defaults to `model.codex = gpt-5.1-codex-max` (set via `ATLAS_AGENT_CLI_MODEL_CODEX`). Available models are listed at [OpenAI Codex models](https://developers.openai.com/codex/models).
 * `reasoning.<provider>` – default reasoning strategy applied per provider unless overridden with `--reasoning`. Codex defaults to `reasoning.codex = medium` (set via `ATLAS_AGENT_CLI_REASONING_CODEX`) so reasoning-friendly models receive the right hint by default.
+* `approval.<provider>` – default approval policy applied per provider unless overridden with `--approval`. Codex defaults to `approval.codex = never` (set via `ATLAS_AGENT_CLI_APPROVAL_CODEX`).
 * `template.task` / `template.instructions` – string templates (defaults to `Task: {TASK}` and `Instructions: {INSTRUCTIONS}`) that shape how the task and instructions are combined before forwarding them to Codex. Workspace logs record the templates, and thread request/resume entries include the rendered messages (instructions first, then task) so you can see exactly what Codex receives.
 
 ## Local Sandbox

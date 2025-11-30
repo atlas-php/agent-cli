@@ -348,6 +348,7 @@ class CodexCliSessionService
         $platformPath = $this->resolvePlatformBasePath();
         $model = $this->determineModelFromArguments($arguments);
         $reasoning = $this->determineReasoningFromArguments($arguments);
+        $approval = $this->determineApprovalFromArguments($arguments);
 
         $event = [
             'type' => 'workspace',
@@ -366,6 +367,10 @@ class CodexCliSessionService
 
         if ($reasoning !== null) {
             $event['reasoning'] = $reasoning;
+        }
+
+        if ($approval !== null) {
+            $event['approval'] = $approval;
         }
 
         $event = $this->maybeAttachTaskFormat(
@@ -490,6 +495,62 @@ class CodexCliSessionService
         return null;
     }
 
+    /**
+     * @param  array<int, string>  $arguments
+     */
+    private function determineApprovalFromArguments(array $arguments): ?string
+    {
+        $argumentCount = count($arguments);
+
+        for ($index = 0; $index < $argumentCount; $index++) {
+            $argument = $arguments[$index];
+
+            if ($argument === '') {
+                continue;
+            }
+
+            if (str_starts_with($argument, '--approval=')) {
+                $value = substr($argument, 11);
+
+                return $value !== '' ? $value : null;
+            }
+
+            if ($argument === '--config') {
+                $next = $arguments[$index + 1] ?? null;
+                $approvalValue = $this->extractApprovalFromConfigValue(is_string($next) ? $next : null);
+                if ($approvalValue !== null) {
+                    return $approvalValue;
+                }
+
+                continue;
+            }
+
+            if ($argument !== '--approval') {
+                if (str_starts_with($argument, '--config=')) {
+                    $value = substr($argument, 9);
+                    $approvalValue = $this->extractApprovalFromConfigValue($value);
+                    if ($approvalValue !== null) {
+                        return $approvalValue;
+                    }
+                }
+
+                continue;
+            }
+
+            $next = $arguments[$index + 1] ?? null;
+
+            if (is_string($next)) {
+                $value = $this->extractApprovalFromConfigValue(trim($next));
+
+                if ($value !== null && $value !== '') {
+                    return $value;
+                }
+            }
+        }
+
+        return null;
+    }
+
     private function extractReasoningFromConfigValue(?string $value): ?string
     {
         if (! is_string($value)) {
@@ -507,7 +568,27 @@ class CodexCliSessionService
             return $reasoning !== '' ? $reasoning : null;
         }
 
-        return $trimmed;
+        return null;
+    }
+
+    private function extractApprovalFromConfigValue(?string $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        if (str_starts_with($trimmed, 'approval_policy=')) {
+            $approval = substr($trimmed, 16);
+
+            return $approval !== '' ? $approval : null;
+        }
+
+        return null;
     }
 
     /**
@@ -1090,6 +1171,7 @@ class CodexCliSessionService
                     isset($event['session_log_path']) ? 'logs: '.$event['session_log_path'] : null,
                     isset($event['model']) ? 'model: '.$event['model'] : null,
                     isset($event['reasoning']) ? 'reasoning: '.$event['reasoning'] : null,
+                    isset($event['approval']) ? 'approval: '.$event['approval'] : null,
                     isset($event['template_task']) ? 'template (task): '.$event['template_task'] : null,
                     isset($event['template_instructions']) ? 'template (instructions): '.$event['template_instructions'] : null,
                     isset($event['instructions_rendered']) ? 'instructions rendered: '.$event['instructions_rendered'] : null,
