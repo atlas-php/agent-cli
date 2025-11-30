@@ -59,10 +59,9 @@ class CodexCliSessionService
             ];
         }
 
-        $jsonFilePath = $this->prepareJsonLogFile($sessionId);
         $headlessResult = $this->runHeadless(
             $arguments,
-            $jsonFilePath,
+            $sessionId,
             $initialUserInput,
             $systemInstructions,
             $threadRequestMeta,
@@ -72,15 +71,7 @@ class CodexCliSessionService
         );
         $process = $headlessResult['process'];
         $codexSessionId = $headlessResult['codex_session_id'] ?? $sessionId;
-
-        if ($headlessResult['codex_session_id'] !== null) {
-            $desiredJsonPath = $this->prepareJsonLogFile($codexSessionId);
-            if ($jsonFilePath !== $desiredJsonPath) {
-                if (@rename($jsonFilePath, $desiredJsonPath)) {
-                    $jsonFilePath = $desiredJsonPath;
-                }
-            }
-        }
+        $jsonFilePath = $headlessResult['json_file_path'];
 
         return [
             'session_id' => $codexSessionId,
@@ -118,11 +109,11 @@ class CodexCliSessionService
      * @param  array<int, string>  $arguments
      * @param  array<string, mixed>|null  $threadRequestMeta
      * @param  array{task?: string|null, instructions?: string|null}|null  $taskFormatTemplates
-     * @return array{process: Process, codex_session_id: string|null}
+     * @return array{process: Process, codex_session_id: string|null, json_file_path: string}
      */
     private function runHeadless(
         array $arguments,
-        string $jsonFilePath,
+        string $generatedSessionId,
         ?string $initialUserInput,
         ?string $systemInstructions,
         ?array $threadRequestMeta,
@@ -134,15 +125,20 @@ class CodexCliSessionService
         $this->prepareProcess($process, $workspacePath);
         $process->setTimeout(null);
         $process->setIdleTimeout(null);
-
-        $jsonHandle = fopen($jsonFilePath, 'ab');
-
-        if ($jsonHandle === false) {
-            throw new RuntimeException('Unable to open JSON log file for writing: '.$jsonFilePath);
-        }
+        /**
+         * @var array{path: string|null, handle: resource|null, buffer: array<int, string>} $jsonLog
+         */
+        $jsonLog = [
+            'path' => null,
+            'handle' => null,
+            'buffer' => [],
+        ];
 
         $jsonBuffer = '';
         $codexSessionId = $resumeThreadId !== null && $resumeThreadId !== '' ? $resumeThreadId : null;
+        if ($codexSessionId !== null) {
+            $this->ensureJsonLogHandle($codexSessionId, $jsonLog);
+        }
         $taskFormatTemplates = $this->resolveTaskFormatTemplates($taskFormatTemplates);
         $trimmedTask = $initialUserInput !== null ? trim($initialUserInput) : null;
         $trimmedInstructions = $systemInstructions !== null ? trim($systemInstructions) : null;
@@ -189,14 +185,14 @@ class CodexCliSessionService
             $jsonState['formatted_task']
         );
 
-        $this->maybeLogWorkspaceEvent($jsonHandle, $codexSessionId, $jsonState);
-        $this->maybeLogThreadLifecycleEvent($jsonHandle, $codexSessionId, $jsonState);
+        $this->maybeLogWorkspaceEvent($jsonLog, $codexSessionId, $jsonState);
+        $this->maybeLogThreadLifecycleEvent($jsonLog, $codexSessionId, $jsonState);
 
         try {
-            $process->run(function (string $type, string $buffer) use ($jsonHandle, &$jsonBuffer, &$codexSessionId, &$jsonState) {
+            $process->run(function (string $type, string $buffer) use (&$jsonBuffer, &$codexSessionId, &$jsonState, &$jsonLog) {
                 if ($type === Process::OUT) {
                     $jsonBuffer .= $buffer;
-                    $this->processJsonBuffer($jsonBuffer, $jsonHandle, $codexSessionId, $jsonState);
+                    $this->processJsonBuffer($jsonBuffer, $jsonLog, $codexSessionId, $jsonState);
 
                     return;
                 }
@@ -208,19 +204,34 @@ class CodexCliSessionService
             });
 
             if (trim($jsonBuffer) !== '') {
-                $this->processJsonLine($jsonBuffer, $jsonHandle, $codexSessionId, $jsonState);
+                $this->processJsonLine($jsonBuffer, $jsonLog, $codexSessionId, $jsonState);
             }
         } finally {
-            fclose($jsonHandle);
+            if ($codexSessionId === null || $codexSessionId === '') {
+                $codexSessionId = $generatedSessionId;
+            }
+
+            if ($codexSessionId !== null && $codexSessionId !== '') {
+                $this->ensureJsonLogHandle($codexSessionId, $jsonLog);
+            }
+
+            if (is_resource($jsonLog['handle'])) {
+                fclose($jsonLog['handle']);
+            }
         }
 
         if (! $process->isSuccessful()) {
             throw new ProcessFailedException($process);
         }
 
+        if ($jsonLog['path'] === null) {
+            throw new RuntimeException('JSON log file path could not be determined.');
+        }
+
         return [
             'process' => $process,
             'codex_session_id' => $codexSessionId,
+            'json_file_path' => $jsonLog['path'],
         ];
     }
 
@@ -325,6 +336,44 @@ class CodexCliSessionService
         }
 
         return $directory.DIRECTORY_SEPARATOR.$sessionId.'.jsonl';
+    }
+
+    /**
+     * @param  array{path: string|null, handle: resource|null, buffer: array<int, string>}  $jsonLog
+     */
+    private function ensureJsonLogHandle(string $sessionId, array &$jsonLog): void
+    {
+        if ($jsonLog['handle'] !== null) {
+            return;
+        }
+
+        $jsonLog['path'] = $this->prepareJsonLogFile($sessionId);
+        $jsonLog['handle'] = fopen($jsonLog['path'], 'ab');
+
+        if ($jsonLog['handle'] === false) {
+            $jsonLog['handle'] = null;
+            throw new RuntimeException('Unable to open JSON log file for writing: '.$jsonLog['path']);
+        }
+
+        foreach ($jsonLog['buffer'] as $bufferedLine) {
+            fwrite($jsonLog['handle'], $bufferedLine."\n");
+        }
+
+        $jsonLog['buffer'] = [];
+    }
+
+    /**
+     * @param  array{path: string|null, handle: resource|null, buffer: array<int, string>}  $jsonLog
+     */
+    private function writeToJsonLog(string $line, array &$jsonLog): void
+    {
+        if ($jsonLog['handle'] === null) {
+            $jsonLog['buffer'][] = $line;
+
+            return;
+        }
+
+        fwrite($jsonLog['handle'], $line."\n");
     }
 
     /**
@@ -776,7 +825,7 @@ class CodexCliSessionService
     }
 
     /**
-     * @param  resource  $jsonHandle
+     * @param  array{path: string|null, handle: resource|null, buffer: array<int, string>}  $jsonLog
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
@@ -793,17 +842,17 @@ class CodexCliSessionService
      *     task_format_rendered_instructions: string|null,
      * }  $state
      */
-    private function processJsonBuffer(string &$buffer, $jsonHandle, ?string &$codexSessionId, array &$state): void
+    private function processJsonBuffer(string &$buffer, array &$jsonLog, ?string &$codexSessionId, array &$state): void
     {
         while (($newlinePosition = strpos($buffer, "\n")) !== false) {
             $line = substr($buffer, 0, $newlinePosition);
             $buffer = substr($buffer, $newlinePosition + 1);
-            $this->processJsonLine($line, $jsonHandle, $codexSessionId, $state);
+            $this->processJsonLine($line, $jsonLog, $codexSessionId, $state);
         }
     }
 
     /**
-     * @param  resource  $jsonHandle
+     * @param  array{path: string|null, handle: resource|null, buffer: array<int, string>}  $jsonLog
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
@@ -820,7 +869,7 @@ class CodexCliSessionService
      *     task_format_rendered_instructions: string|null,
      * }  $state
      */
-    private function processJsonLine(string $line, $jsonHandle, ?string &$codexSessionId, array &$state): void
+    private function processJsonLine(string $line, array &$jsonLog, ?string &$codexSessionId, array &$state): void
     {
         $rawLine = rtrim($line, "\r\n");
         $trimmed = trim($rawLine);
@@ -831,15 +880,25 @@ class CodexCliSessionService
         $decoded = json_decode($trimmed, true);
 
         if (! is_array($decoded)) {
-            fwrite($jsonHandle, $rawLine."\n");
+            if ($codexSessionId !== null && $codexSessionId !== '') {
+                $this->ensureJsonLogHandle($codexSessionId, $jsonLog);
+            }
+
+            $this->writeToJsonLog($rawLine, $jsonLog);
             $this->streamToTerminal(Process::OUT, $trimmed."\n");
 
             return;
         }
 
+        $this->maybeCaptureCodexSessionId($decoded, $codexSessionId);
+
+        if ($codexSessionId !== null && $codexSessionId !== '') {
+            $this->ensureJsonLogHandle($codexSessionId, $jsonLog);
+        }
+
         $this->maybeCaptureUserInputFromEvent($decoded, $state);
 
-        fwrite($jsonHandle, $rawLine."\n");
+        $this->writeToJsonLog($rawLine, $jsonLog);
 
         $rendered = $this->renderCodexEvent($decoded, $codexSessionId, $state);
 
@@ -849,7 +908,7 @@ class CodexCliSessionService
     }
 
     /**
-     * @param  resource  $jsonHandle
+     * @param  array{path: string|null, handle: resource|null, buffer: array<int, string>}  $jsonLog
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
@@ -866,7 +925,7 @@ class CodexCliSessionService
      *     task_format_rendered_instructions: string|null,
      * }  $state
      */
-    private function maybeLogWorkspaceEvent($jsonHandle, ?string &$codexSessionId, array &$state): void
+    private function maybeLogWorkspaceEvent(array &$jsonLog, ?string &$codexSessionId, array &$state): void
     {
         if ($state['workspace_event_logged'] === true) {
             return;
@@ -883,12 +942,12 @@ class CodexCliSessionService
             return;
         }
 
-        $this->processJsonLine($encoded, $jsonHandle, $codexSessionId, $state);
+        $this->processJsonLine($encoded, $jsonLog, $codexSessionId, $state);
         $state['workspace_event_logged'] = true;
     }
 
     /**
-     * @param  resource  $jsonHandle
+     * @param  array{path: string|null, handle: resource|null, buffer: array<int, string>}  $jsonLog
      * @param  array{
      *     pending_items: array<string, string>,
      *     initial_user_input: string|null,
@@ -905,7 +964,7 @@ class CodexCliSessionService
      *     task_format_rendered_instructions: string|null,
      * }  $state
      */
-    private function maybeLogThreadLifecycleEvent($jsonHandle, ?string &$codexSessionId, array &$state): void
+    private function maybeLogThreadLifecycleEvent(array &$jsonLog, ?string &$codexSessionId, array &$state): void
     {
         if ($state['thread_request_logged'] === true) {
             return;
@@ -975,8 +1034,24 @@ class CodexCliSessionService
             return;
         }
 
-        $this->processJsonLine($encoded, $jsonHandle, $codexSessionId, $state);
+        $this->processJsonLine($encoded, $jsonLog, $codexSessionId, $state);
         $state['thread_request_logged'] = true;
+    }
+
+    /**
+     * @param  array<string, mixed>  $event
+     */
+    private function maybeCaptureCodexSessionId(array $event, ?string &$codexSessionId): void
+    {
+        if (($event['type'] ?? '') !== 'thread.started') {
+            return;
+        }
+
+        $threadId = trim((string) ($event['thread_id'] ?? ''));
+
+        if ($threadId !== '') {
+            $codexSessionId = $threadId;
+        }
     }
 
     /**
