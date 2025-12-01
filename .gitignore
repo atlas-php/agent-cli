@@ -28,6 +28,7 @@ yarn-error.log
 !.vscode/launch.json
 !.vscode/extensions.json
 !.vscode/*.code-snippets
+.workspaces/
 
 # Intellij idea
 *.iml
