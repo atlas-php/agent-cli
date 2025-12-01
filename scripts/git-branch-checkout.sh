@@ -33,11 +33,3 @@ if ! git show-ref --verify --quiet "refs/heads/$BRANCH_NAME"; then
   echo "Error: Branch \"$BRANCH_NAME\" does not exist."
   exit 1
 fi
-
-# --- CHECKOUT THE BRANCH ----------------------------------------------------
-
-echo "Checking out existing branch: \"$BRANCH_NAME\""
-
-git checkout "$BRANCH_NAME"
-
-echo "Switched to branch \"$BRANCH_NAME\" successfully."
