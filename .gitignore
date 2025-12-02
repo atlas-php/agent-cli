@@ -28,7 +28,6 @@ yarn-error.log
 !.vscode/launch.json
 !.vscode/extensions.json
 !.vscode/*.code-snippets
-.workspaces/
 
 # Intellij idea
 *.iml
@@ -46,3 +45,4 @@ Temporary Items
 
 components.d.ts
 auto-imports.d.ts
+.workspaces/
